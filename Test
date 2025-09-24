@@ -171,10 +171,10 @@ getBiasCoverageInfo() => "Top16: " + str.tostring(math.round(bias_gainers_weight
 // ═══════════════════════════════════════════════════════════════════════════════════
 
 // Request real OHLC data for point calculations
-real_open = request.security(syminfo.tickerid, timeframe.period, open, lookahead=barmerge.lookahead_off)
-real_high = request.security(syminfo.tickerid, timeframe.period, high, lookahead=barmerge.lookahead_off)
-real_low = request.security(syminfo.tickerid, timeframe.period, low, lookahead=barmerge.lookahead_off)
-real_close = request.security(syminfo.tickerid, timeframe.period, close, lookahead=barmerge.lookahead_off)
+normal_open = request.security(syminfo.tickerid, timeframe.period, open, lookahead=barmerge.lookahead_off)
+normal_high = request.security(syminfo.tickerid, timeframe.period, high, lookahead=barmerge.lookahead_off)
+normal_low = request.security(syminfo.tickerid, timeframe.period, low, lookahead=barmerge.lookahead_off)
+normal_close = request.security(syminfo.tickerid, timeframe.period, close, lookahead=barmerge.lookahead_off)
 
 
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -949,20 +949,20 @@ if tbh_in_trade and bar_index > tbh_entry_bar_index and not tbh_315_exit
     if tbh_using_fixed_tp
         // FIXED TP MODE - Traditional TP/SL logic (no trailing)
         if tbh_trade_type == "BUY"
-            if real_low <= tbh_current_sl
+            if normal_low <= tbh_current_sl
                 tbh_sl_hit := true
                 tbh_in_trade := false
                 tbh_trade_points_sl := tbh_entry_price - tbh_current_sl
-            else if real_high >= tbh_take_profit
+            else if normal_high >= tbh_take_profit
                 tbh_tp_hit := true
                 tbh_in_trade := false
                 tbh_trade_points_tp := tbh_take_profit - tbh_entry_price
         else if tbh_trade_type == "SELL"
-            if real_high >= tbh_current_sl
+            if normal_high >= tbh_current_sl
                 tbh_sl_hit := true
                 tbh_in_trade := false
                 tbh_trade_points_sl := tbh_current_sl - tbh_entry_price
-            else if real_low <= tbh_take_profit
+            else if normal_low <= tbh_take_profit
                 tbh_tp_hit := true
                 tbh_in_trade := false
                 tbh_trade_points_tp := tbh_entry_price - tbh_take_profit
@@ -1000,15 +1000,15 @@ if tbh_in_trade and bar_index > tbh_entry_bar_index and not tbh_315_exit
             
             if tbh_trade_type == "BUY"
                 // Exit BUY when price crosses BELOW the green trailing line
-                if real_low <= tbh_lowerband and real_close < tbh_lowerband
+                if normal_low <= tbh_lowerband and normal_close < tbh_lowerband
                     tbh_should_exit := true
             else if tbh_trade_type == "SELL"
                 // Exit SELL when price crosses ABOVE the red trailing line
-                if real_high >= tbh_upperband and real_close > tbh_upperband
+                if normal_high >= tbh_upperband and normal_close > tbh_upperband
                     tbh_should_exit := true
             
             if tbh_should_exit
-                tbh_trade_points_tp := tbh_trade_type == "BUY" ? real_close - tbh_entry_price : tbh_entry_price - real_close
+                tbh_trade_points_tp := tbh_trade_type == "BUY" ? normal_close - tbh_entry_price : tbh_entry_price - normal_close
                 
                 if tbh_trade_points_tp > 0
                     tbh_tp_hit := true
@@ -1021,12 +1021,12 @@ if tbh_in_trade and bar_index > tbh_entry_bar_index and not tbh_315_exit
         else
             // Initial SL logic (before Supertrend activation)
             if tbh_trade_type == "BUY"
-                if real_low <= tbh_current_sl
+                if normal_low <= tbh_current_sl
                     tbh_sl_hit := true
                     tbh_in_trade := false
                     tbh_trade_points_sl := tbh_entry_price - tbh_current_sl
             else if tbh_trade_type == "SELL"
-                if real_high >= tbh_current_sl
+                if normal_high >= tbh_current_sl
                     tbh_sl_hit := true
                     tbh_in_trade := false
                     tbh_trade_points_sl := tbh_current_sl - tbh_entry_price
@@ -1078,7 +1078,7 @@ if bb_in_trade and bar_index > bb_entry_bar_index and not bb_315_exit
 if breakout_in_trade and isAfter315PM()
     breakout_315_exit := true
     breakout_in_trade := false
-    breakout_trade_points_tp := breakout_trade_type == "BUY" ? real_close - breakout_entry_price : breakout_entry_price - real_close
+    breakout_trade_points_tp := breakout_trade_type == "BUY" ? normal_close - breakout_entry_price : breakout_entry_price - normal_close
 
 // Breakout Trade Exit Logic - Using Real OHLC for calculations
 if breakout_in_trade and bar_index > breakout_entry_bar_index and not breakout_315_exit
@@ -1087,50 +1087,50 @@ if breakout_in_trade and bar_index > breakout_entry_bar_index and not breakout_3
     if is_auto_tp_time
         breakout_auto_tp_hit_alert := true
         breakout_in_trade := false
-        breakout_trade_points_tp := breakout_trade_type == "BUY" ? real_close - breakout_entry_price : breakout_entry_price - real_close
+        breakout_trade_points_tp := breakout_trade_type == "BUY" ? normal_close - breakout_entry_price : breakout_entry_price - normal_close
     
     // Regular Exit Logic
     else if breakout_sl_type == "Fixed Points" or breakout_sl_type == "Entry Candle Low"
         if breakout_trade_type == "BUY"
-            if real_low <= breakout_stop_loss
+            if normal_low <= breakout_stop_loss
                 breakout_sl_hit_alert := true
                 breakout_in_trade := false
                 breakout_trade_points_sl := breakout_entry_price - breakout_stop_loss
-            else if (Buy_ATR or Sell_ATR) and real_close > breakout_entry_price
+            else if (Buy_ATR or Sell_ATR) and normal_close > breakout_entry_price
                 breakout_tp_hit_alert := true
                 breakout_in_trade := false
-                breakout_trade_points_tp := real_close - breakout_entry_price
+                breakout_trade_points_tp := normal_close - breakout_entry_price
         else if breakout_trade_type == "SELL"
-            if real_high >= breakout_stop_loss
+            if normal_high >= breakout_stop_loss
                 breakout_sl_hit_alert := true
                 breakout_in_trade := false
                 breakout_trade_points_sl := breakout_stop_loss - breakout_entry_price
-            else if (Buy_ATR or Sell_ATR) and real_close < breakout_entry_price
+            else if (Buy_ATR or Sell_ATR) and normal_close < breakout_entry_price
                 breakout_tp_hit_alert := true
                 breakout_in_trade := false
-                breakout_trade_points_tp := breakout_entry_price - real_close
+                breakout_trade_points_tp := breakout_entry_price - normal_close
     
     else if breakout_sl_type == "ATR Trailing"
         if breakout_trade_type == "BUY"
             if Buy_ATR or Sell_ATR
-                if real_close > breakout_entry_price
+                if normal_close > breakout_entry_price
                     breakout_tp_hit_alert := true
                     breakout_in_trade := false
-                    breakout_trade_points_tp := real_close - breakout_entry_price
+                    breakout_trade_points_tp := normal_close - breakout_entry_price
                 else
                     breakout_sl_hit_alert := true
                     breakout_in_trade := false
-                    breakout_trade_points_sl := breakout_entry_price - real_close
+                    breakout_trade_points_sl := breakout_entry_price - normal_close
         else if breakout_trade_type == "SELL"
             if Buy_ATR or Sell_ATR
-                if real_close < breakout_entry_price
+                if normal_close < breakout_entry_price
                     breakout_tp_hit_alert := true
                     breakout_in_trade := false
-                    breakout_trade_points_tp := breakout_entry_price - real_close
+                    breakout_trade_points_tp := breakout_entry_price - normal_close
                 else
                     breakout_sl_hit_alert := true
                     breakout_in_trade := false
-                    breakout_trade_points_sl := real_close - breakout_entry_price
+                    breakout_trade_points_sl := normal_close - breakout_entry_price
 
 // TBH Trade Management with 3:15 PM Auto Exit
 if tbh_in_trade and isAfter315PM()
@@ -1138,9 +1138,9 @@ if tbh_in_trade and isAfter315PM()
     tbh_in_trade := false
     tbh_supertrend_activated := false
     if tbh_trade_type == "BUY"
-        tbh_trade_points_tp := real_close - tbh_entry_price
+        tbh_trade_points_tp := normal_close - tbh_entry_price
     else
-        tbh_trade_points_tp := tbh_entry_price - real_close
+        tbh_trade_points_tp := tbh_entry_price - normal_close
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // CORRECTED PERFORMANCE TRACKING FOR BB, BREAKOUT & TBH
