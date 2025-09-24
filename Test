@@ -1449,8 +1449,7 @@ if barstate.islast and show_performance_table
     table.cell(performanceTable, 9, 14, user_login, text_color=color.white, text_size=size.small, bgcolor=color.new(color.navy, 60))
     table.cell(performanceTable, 10, 14, global_candle_status, text_color=color.white, text_size=size.small, bgcolor=enable_global_candle_color ? color.new(color.green, 60) : color.new(color.red, 60))
     table.cell(performanceTable, 11, 14, 'OVERLAP', text_color=color.white, text_size=size.small, bgcolor=enable_overlap_filter ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 12, 14, '3:15 EXIT', text_color=color.white, text_size=size.small, bgcolor=enable_315_exit ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 12, 14, 'v17.0-BIAS', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 12, 14, 'v17.1-GLOBAL', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // ENHANCED STATUS TABLE - UPDATED FOR 3 STRATEGIES INCLUDING BIAS
