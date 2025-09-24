@@ -166,16 +166,6 @@ getBiasThresholdInfo() => "Bull>" + str.tostring(bias_bull_threshold, "#.#") + "
 getBiasCoverageInfo() => "Top16: " + str.tostring(math.round(bias_gainers_weight + bias_losers_weight, 1)) + "% coverage"
 
 
-// ═══════════════════════════════════════════════════════════════════════════════════
-// REAL OHLC DATA FOR POINT CALCULATION (HEIKIN ASHI COMPENSATION)
-// ═══════════════════════════════════════════════════════════════════════════════════
-
-// Request real OHLC data for point calculations
-normal_open = request.security(syminfo.tickerid, timeframe.period, open, lookahead=barmerge.lookahead_off)
-normal_high = request.security(syminfo.tickerid, timeframe.period, high, lookahead=barmerge.lookahead_off)
-normal_low = request.security(syminfo.tickerid, timeframe.period, low, lookahead=barmerge.lookahead_off)
-normal_close = request.security(syminfo.tickerid, timeframe.period, close, lookahead=barmerge.lookahead_off)
-
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // BOLLINGER BAND REVERSAL STRATEGY INPUTS - IMPROVED SL LOGIC
