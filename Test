@@ -1041,7 +1041,7 @@ if bb_in_trade and isAfter315PM()
     else
         bb_trade_points_tp := bb_entry_price - normal_close
 
-// Only check TP/SL on candles AFTER entry candle - Using Real OHLC for calculations
+// Only check TP/SL on candles AFTER entry candle - Using normal OHLC for calculations
 // Only check TP/SL on candles AFTER entry candle
 if bb_in_trade and bar_index > bb_entry_bar_index and not bb_315_exit
     if bb_trade_type == "BUY"
@@ -1070,7 +1070,7 @@ if breakout_in_trade and isAfter315PM()
     breakout_in_trade := false
     breakout_trade_points_tp := breakout_trade_type == "BUY" ? normal_close - breakout_entry_price : breakout_entry_price - normal_close
 
-// Breakout Trade Exit Logic - Using Real OHLC for calculations
+// Breakout Trade Exit Logic - Using normal OHLC for calculations
 if breakout_in_trade and bar_index > breakout_entry_bar_index and not breakout_315_exit
     
     // Auto TP at 3:15 PM
