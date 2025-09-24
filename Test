@@ -6,14 +6,16 @@
 indicator('Nifty New + Bias', overlay=true, max_bars_back=501, max_lines_count=400)
 
 
-// ═══════════════════════════════════════════════════════════════════════════════════
-// NORMAL CANDLE DATA FOR PNL CALCULATION
-// ═══════════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// NORMAL CANDLE DATA FOR PNL CALCULATION - FIXED
+// ═════════════════════════════════════════════════════════════════
 
-// Request normal candle data for accurate PNL calculation
-normal_close = request.security(syminfo.tickerid, timeframe.period, close, lookahead=barmerge.lookahead_off)
-normal_high = request.security(syminfo.tickerid, timeframe.period, high, lookahead=barmerge.lookahead_off)
-normal_low = request.security(syminfo.tickerid, timeframe.period, low, lookahead=barmerge.lookahead_off)
+// Get the base ticker without HA prefix
+base_ticker = str.replace(syminfo.tickerid, "HA:", "")
+normal_close = request.security(base_ticker, timeframe.period, close, lookahead=barmerge.lookahead_off)
+normal_high = request.security(base_ticker, timeframe.period, high, lookahead=barmerge.lookahead_off) 
+normal_low = request.security(base_ticker, timeframe.period, low, lookahead=barmerge.lookahead_off)
+normal_open = request.security(base_ticker, timeframe.period, open, lookahead=barmerge.lookahead_off)
 
 
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -1362,8 +1364,8 @@ if barstate.islast and show_performance_table
         net_pts = month_tp_points - month_sl_points
         win_rate = calculateWinRate(month_tp_trades, month_sl_trades)
         profit_factor = month_sl_points > 0 ? math.round(month_tp_points / month_sl_points, 2) : (month_tp_points > 0 ? 999.99 : 0.0)
-        option_pts = math.round(net_pts * 0.30)
-        pnl = math.round(option_pts * 500)
+        option_pts = math.round(net_pts * 0.275)
+        pnl = math.round(option_pts * 525)
         
         // Update grand totals
         grand_tp_trades := grand_tp_trades + month_tp_trades
@@ -1392,8 +1394,8 @@ if barstate.islast and show_performance_table
     grand_net_pts = grand_tp_points - grand_sl_points
     grand_win_rate = calculateWinRate(grand_tp_trades, grand_sl_trades)
     grand_profit_factor = grand_sl_points > 0 ? math.round(grand_tp_points / grand_sl_points, 2) : (grand_tp_points > 0 ? 999.99 : 0.0)
-    grand_option_pts = math.round(grand_net_pts * 0.30)
-    grand_pnl = math.round(grand_option_pts * 500)
+    grand_option_pts = math.round(grand_net_pts * 0.275)
+    grand_pnl = math.round(grand_option_pts * 525)
     
     table.cell(performanceTable, 0, 13, 'TOTAL', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
     table.cell(performanceTable, 1, 13, str.tostring(grand_tp_trades), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
