@@ -29,6 +29,9 @@ enable_tbh_strategy = input.bool(true, title="✅ Enable Top Bottom Hunter Strat
 // BIAS CONFLUENCE TOGGLE
 enable_bias_confluence = input.bool(true, title="✅ Enable Nifty Bias Confluence", tooltip="Requires BULL bias for BUY signals and BEAR bias for SELL signals", group="Strategy Toggles")
 
+// GLOBAL CANDLE COLOR CONFLUENCE TOGGLE
+enable_global_candle_color = input.bool(false, title="✅ Enable Global Candle Color Confluence", tooltip="For SELL signals: requires previous candle to be red. For BUY signals: requires previous candle to be green. Applies to all strategies.", group="Strategy Toggles")
+
 // TIME SLOT EXCLUSION SETTINGS
 enable_time_exclusion = input.bool(false, title="🚫 Enable Time Slot Exclusion", tooltip="Blocks trades during poor performance time slots", group="Strategy Toggles")
 
@@ -406,6 +409,20 @@ isTBHEnhancedEntryValid(isBuySignal) =>
                 true
 
 // ═══════════════════════════════════════════════════════════════════════════════════
+// GLOBAL CANDLE COLOR CONFLUENCE FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Global Candle Color Confluence Validation
+isGlobalCandleColorValid(isBuySignal) =>
+    if not enable_global_candle_color
+        true
+    else
+        if isBuySignal
+            close[1] > open[1]  // Previous candle is green for BUY signals
+        else
+            close[1] < open[1]  // Previous candle is red for SELL signals
+
+// ═══════════════════════════════════════════════════════════════════════════════════
 // FIXED PERFORMANCE TRACKING SYSTEM - CORRECTED DATA DISPLAY
 // ═══════════════════════════════════════════════════════════════════════════════════
 
@@ -588,7 +605,7 @@ var float breakout_entry_candle_low = na
 
 hgst_value = ta.highest(prd)[1]
 
-if array.size(phval) >= mintest and close > open and enable_breakout_strategy and not isEntryBlocked() and isBiasAllowedForBuy()
+if array.size(phval) >= mintest and close > open and enable_breakout_strategy and not isEntryBlocked() and isBiasAllowedForBuy() and isGlobalCandleColorValid(true)
     if close > hgst_value
         bomax = array.get(phval, 0)
         xx = 0
@@ -613,7 +630,7 @@ var float breakout_entry_candle_high = na
 
 lwst_value = ta.lowest(prd)[1]
 
-if array.size(plval) >= mintest and close < open and enable_breakout_strategy and not isEntryBlocked() and isBiasAllowedForSell()
+if array.size(plval) >= mintest and close < open and enable_breakout_strategy and not isEntryBlocked() and isBiasAllowedForSell() and isGlobalCandleColorValid(false)
     if close < lwst_value
         bomin = array.get(plval, 0)
         xx = 0
@@ -719,16 +736,16 @@ var float tbh_entry_candle_low = na
 var float tbh_entry_candle_high = na
 var bool tbh_using_fixed_tp = false  // Track which TP mode is active
 
-// TBH Entry Conditions - WITH ALL FILTERS (TIME, CANDLE COLOR, ENHANCED ENTRY, BIAS)
+// TBH Entry Conditions - WITH ALL FILTERS (TIME, CANDLE COLOR, ENHANCED ENTRY, BIAS, GLOBAL CANDLE COLOR)
 tbh_buy_condition_base  = ta.crossover(tbh_rsi_value, tbh_rsi_oversold) and close > tbh_fib_level_1 and 
                          (not tbh_volume_enabled or tbh_volume_confirmed) and not tbh_in_trade and 
                          enable_tbh_strategy and not isEntryBlocked() and 
-                         isTBHCandleColorValid(true) and isTBHEnhancedEntryValid(true) and isBiasAllowedForBuy()
+                         isTBHCandleColorValid(true) and isTBHEnhancedEntryValid(true) and isBiasAllowedForBuy() and isGlobalCandleColorValid(true)
 
 tbh_sell_condition_base = ta.crossunder(tbh_rsi_value, tbh_rsi_overbought) and close < tbh_fib_level_0 and 
                          (not tbh_volume_enabled or tbh_volume_confirmed) and not tbh_in_trade and 
                          enable_tbh_strategy and not isEntryBlocked() and 
-                         isTBHCandleColorValid(false) and isTBHEnhancedEntryValid(false) and isBiasAllowedForSell()
+                         isTBHCandleColorValid(false) and isTBHEnhancedEntryValid(false) and isBiasAllowedForSell() and isGlobalCandleColorValid(false)
 
 // TBH Trade Exit Flags
 var bool tbh_tp_hit = false
@@ -750,8 +767,8 @@ breakout_signal_this_bar := false
 tbh_signal_this_bar := false
 
 // Base signal conditions (without overlap filtering) - WITH TIME EXCLUSION AND BIAS
-bb_sell_base = bb_waiting_for_entry and bb_alert_is_above_upper and close < bb_alert_candle_low and enable_bb_strategy and not isEntryBlocked() and isBiasAllowedForSell()
-bb_buy_base = bb_waiting_for_entry and not bb_alert_is_above_upper and close > bb_alert_candle_high and enable_bb_strategy and not isEntryBlocked() and isBiasAllowedForBuy()
+bb_sell_base = bb_waiting_for_entry and bb_alert_is_above_upper and close < bb_alert_candle_low and enable_bb_strategy and not isEntryBlocked() and isBiasAllowedForSell() and isGlobalCandleColorValid(false)
+bb_buy_base = bb_waiting_for_entry and not bb_alert_is_above_upper and close > bb_alert_candle_high and enable_bb_strategy and not isEntryBlocked() and isBiasAllowedForBuy() and isGlobalCandleColorValid(true)
 
 // Check for potential signals
 bb_has_signal = (bb_sell_base or bb_buy_base) and enable_bb_strategy
@@ -1418,26 +1435,27 @@ if barstate.islast and show_performance_table
     table.cell(performanceTable, 3, 14, 'BRK: ' + str.tostring(breakout_tp_count) + '/' + str.tostring(breakout_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.orange, 60))
     table.cell(performanceTable, 4, 14, 'BIAS: ' + current_nifty_bias, text_color=color.white, text_size=size.small, bgcolor=current_nifty_bias == "BULL" ? color.new(color.green, 60) : current_nifty_bias == "BEAR" ? color.new(color.red, 60) : color.new(color.orange, 60))
     
-    // Enable/Disable Status - UPDATED WITH 3 STRATEGIES + BIAS
+    // Enable/Disable Status - UPDATED WITH 3 STRATEGIES + BIAS + GLOBAL CANDLE COLOR
     bb_status = enable_bb_strategy ? "ON" : "OFF"
     tbh_status = enable_tbh_strategy ? "ON" : "OFF"
     breakout_status = enable_breakout_strategy ? "ON" : "OFF"
     bias_status = enable_bias_confluence ? "ON" : "OFF"
+    global_candle_status = enable_global_candle_color ? "ON" : "OFF"
     
     table.cell(performanceTable, 5, 14, bb_status, text_color=color.white, text_size=size.small, bgcolor=enable_bb_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
     table.cell(performanceTable, 6, 14, tbh_status, text_color=color.white, text_size=size.small, bgcolor=enable_tbh_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
     table.cell(performanceTable, 7, 14, breakout_status, text_color=color.white, text_size=size.small, bgcolor=enable_breakout_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
     table.cell(performanceTable, 8, 14, bias_status, text_color=color.white, text_size=size.small, bgcolor=enable_bias_confluence ? color.new(color.green, 60) : color.new(color.red, 60))
     table.cell(performanceTable, 9, 14, user_login, text_color=color.white, text_size=size.small, bgcolor=color.new(color.navy, 60))
-    table.cell(performanceTable, 10, 14, 'OVERLAP', text_color=color.white, text_size=size.small, bgcolor=enable_overlap_filter ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 11, 14, '3:15 EXIT', text_color=color.white, text_size=size.small, bgcolor=enable_315_exit ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 12, 14, 'v17.0-BIAS', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 10, 14, global_candle_status, text_color=color.white, text_size=size.small, bgcolor=enable_global_candle_color ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 11, 14, 'OVERLAP', text_color=color.white, text_size=size.small, bgcolor=enable_overlap_filter ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 12, 14, 'v17.1-GLOBAL', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // ENHANCED STATUS TABLE - UPDATED FOR 3 STRATEGIES INCLUDING BIAS
 // ═══════════════════════════════════════════════════════════════════════════════════
 
-var statusTable = table.new(position.top_right, 2, 18, bgcolor=color.new(color.black, 20), border_width=2)
+var statusTable = table.new(position.top_right, 2, 19, bgcolor=color.new(color.black, 20), border_width=2)
 if barstate.islast
     table.cell(statusTable, 0, 0, "Parameter", text_color=color.white, bgcolor=color.new(color.blue, 60))
     table.cell(statusTable, 1, 0, "Value", text_color=color.white, bgcolor=color.new(color.blue, 60))
@@ -1478,68 +1496,73 @@ if barstate.islast
     bias_color = current_nifty_bias == "BULL" ? color.new(color.green, 40) : current_nifty_bias == "BEAR" ? color.new(color.red, 40) : color.new(color.orange, 40)
     table.cell(statusTable, 1, 4, current_nifty_bias, text_color=color.white, bgcolor=bias_color)
     
-    // ENHANCED OVERLAP FILTER STATUS
-    table.cell(statusTable, 0, 5, "Overlap Filter", text_color=color.white, bgcolor=color.new(color.purple, 40))
-    overlap_status = enable_overlap_filter ? "ON" : "OFF"
-    table.cell(statusTable, 1, 5, overlap_status, text_color=color.white, bgcolor=enable_overlap_filter ? color.new(color.green, 40) : color.new(color.red, 40))
+    // GLOBAL CANDLE COLOR CONFLUENCE STATUS
+    table.cell(statusTable, 0, 5, "Global Candle Color", text_color=color.white, bgcolor=color.new(color.yellow, 40))
+    global_candle_status_text = enable_global_candle_color ? "ON" : "OFF"
+    table.cell(statusTable, 1, 5, global_candle_status_text, text_color=color.white, bgcolor=enable_global_candle_color ? color.new(color.green, 40) : color.new(color.red, 40))
     
-    table.cell(statusTable, 0, 6, "Any Trade Active", text_color=color.white, bgcolor=color.new(color.orange, 40))
+    // ENHANCED OVERLAP FILTER STATUS
+    table.cell(statusTable, 0, 6, "Overlap Filter", text_color=color.white, bgcolor=color.new(color.purple, 40))
+    overlap_status = enable_overlap_filter ? "ON" : "OFF"
+    table.cell(statusTable, 1, 6, overlap_status, text_color=color.white, bgcolor=enable_overlap_filter ? color.new(color.green, 40) : color.new(color.red, 40))
+    
+    table.cell(statusTable, 0, 7, "Any Trade Active", text_color=color.white, bgcolor=color.new(color.orange, 40))
     active_status = any_strategy_active ? "YES" : "NO"
     active_color = any_strategy_active ? color.new(color.red, 40) : color.new(color.green, 40)
-    table.cell(statusTable, 1, 6, active_status, text_color=color.white, bgcolor=active_color)
+    table.cell(statusTable, 1, 7, active_status, text_color=color.white, bgcolor=active_color)
     
-    table.cell(statusTable, 0, 7, "3:15 Exit", text_color=color.white, bgcolor=color.new(color.orange, 40))
+    table.cell(statusTable, 0, 8, "3:15 Exit", text_color=color.white, bgcolor=color.new(color.orange, 40))
     exit_315_status = enable_315_exit ? "ON" : "OFF"
-    table.cell(statusTable, 1, 7, exit_315_status, text_color=color.white, bgcolor=enable_315_exit ? color.new(color.green, 40) : color.new(color.red, 40))
+    table.cell(statusTable, 1, 8, exit_315_status, text_color=color.white, bgcolor=enable_315_exit ? color.new(color.green, 40) : color.new(color.red, 40))
     
     // Signal overlap tracking
-    table.cell(statusTable, 0, 8, "Signals Count", text_color=color.white, bgcolor=color.new(color.yellow, 40))
-    table.cell(statusTable, 1, 8, str.tostring(signals_count), text_color=color.white, bgcolor=signals_count > 1 ? color.new(color.red, 40) : color.new(color.green, 40))
+    table.cell(statusTable, 0, 9, "Signals Count", text_color=color.white, bgcolor=color.new(color.yellow, 40))
+    table.cell(statusTable, 1, 9, str.tostring(signals_count), text_color=color.white, bgcolor=signals_count > 1 ? color.new(color.red, 40) : color.new(color.green, 40))
     
     // Overlap blocking status
-    table.cell(statusTable, 0, 9, "Overlap Blocks", text_color=color.white, bgcolor=color.new(color.red, 40))
+    table.cell(statusTable, 0, 10, "Overlap Blocks", text_color=color.white, bgcolor=color.new(color.red, 40))
     blocks_status = overlap_filter_blocks_all ? "YES" : "NO"
     blocks_color = overlap_filter_blocks_all ? color.new(color.red, 40) : color.new(color.green, 40)
-    table.cell(statusTable, 1, 9, blocks_status, text_color=color.white, bgcolor=blocks_color)
+    table.cell(statusTable, 1, 10, blocks_status, text_color=color.white, bgcolor=blocks_color)
     
     // TBH Supertrend Activation Status
-    table.cell(statusTable, 0, 10, "TBH ST Activated", text_color=color.white, bgcolor=color.new(color.lime, 40))
+    table.cell(statusTable, 0, 11, "TBH ST Activated", text_color=color.white, bgcolor=color.new(color.lime, 40))
     tbh_activation_status = tbh_in_trade and tbh_supertrend_activated ? "YES" : "NO"
     tbh_activation_color = tbh_in_trade and tbh_supertrend_activated ? color.new(color.green, 40) : color.new(color.gray, 40)
-    table.cell(statusTable, 1, 10, tbh_activation_status, text_color=color.white, bgcolor=tbh_activation_color)
+    table.cell(statusTable, 1, 11, tbh_activation_status, text_color=color.white, bgcolor=tbh_activation_color)
     
     // TBH Current SL vs Initial SL
-    table.cell(statusTable, 0, 11, "TBH Current SL", text_color=color.white, bgcolor=color.new(color.lime, 40))
+    table.cell(statusTable, 0, 12, "TBH Current SL", text_color=color.white, bgcolor=color.new(color.lime, 40))
     if tbh_in_trade
         sl_color = tbh_supertrend_activated ? color.new(color.green, 40) : color.new(color.red, 40)
-        table.cell(statusTable, 1, 11, str.tostring(tbh_current_sl, "#.##"), text_color=color.white, bgcolor=sl_color)
-    else
-        table.cell(statusTable, 1, 11, "N/A", text_color=color.white, bgcolor=color.new(color.gray, 40))
-    
-    // TBH Initial SL
-    table.cell(statusTable, 0, 12, "TBH Initial SL", text_color=color.white, bgcolor=color.new(color.orange, 40))
-    if tbh_in_trade
-        table.cell(statusTable, 1, 12, str.tostring(tbh_initial_sl, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+        table.cell(statusTable, 1, 12, str.tostring(tbh_current_sl, "#.##"), text_color=color.white, bgcolor=sl_color)
     else
         table.cell(statusTable, 1, 12, "N/A", text_color=color.white, bgcolor=color.new(color.gray, 40))
     
+    // TBH Initial SL
+    table.cell(statusTable, 0, 13, "TBH Initial SL", text_color=color.white, bgcolor=color.new(color.orange, 40))
+    if tbh_in_trade
+        table.cell(statusTable, 1, 13, str.tostring(tbh_initial_sl, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+    else
+        table.cell(statusTable, 1, 13, "N/A", text_color=color.white, bgcolor=color.new(color.gray, 40))
+    
     // TBH Supertrend Current Value
-    table.cell(statusTable, 0, 13, "TBH Supertrend", text_color=color.white, bgcolor=color.new(color.lime, 40))
+    table.cell(statusTable, 0, 14, "TBH Supertrend", text_color=color.white, bgcolor=color.new(color.lime, 40))
     st_color = tbh_direction == -1 ? color.new(color.green, 40) : color.new(color.red, 40)
-    table.cell(statusTable, 1, 13, str.tostring(tbh_supertrend, "#.##"), text_color=color.white, bgcolor=st_color)
+    table.cell(statusTable, 1, 14, str.tostring(tbh_supertrend, "#.##"), text_color=color.white, bgcolor=st_color)
 
-    table.cell(statusTable, 0, 14, "TBH Fib 0 (0.382)", text_color=color.white, bgcolor=color.new(color.red, 40))
-    table.cell(statusTable, 1, 14, str.tostring(tbh_fib_level_0, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+    table.cell(statusTable, 0, 15, "TBH Fib 0 (0.382)", text_color=color.white, bgcolor=color.new(color.red, 40))
+    table.cell(statusTable, 1, 15, str.tostring(tbh_fib_level_0, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
 
-    table.cell(statusTable, 0, 15, "TBH Fib 1 (0.618)", text_color=color.white, bgcolor=color.new(color.green, 40))
-    table.cell(statusTable, 1, 15, str.tostring(tbh_fib_level_1, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+    table.cell(statusTable, 0, 16, "TBH Fib 1 (0.618)", text_color=color.white, bgcolor=color.new(color.green, 40))
+    table.cell(statusTable, 1, 16, str.tostring(tbh_fib_level_1, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
     
     // SL Streak status
-    table.cell(statusTable, 0, 16, "SL Streak", text_color=color.white, bgcolor=color.new(color.red, 40))
-    table.cell(statusTable, 1, 16, str.tostring(current_sl_streak) + "/" + str.tostring(max_sl_streak), text_color=color.white, bgcolor=color.new(color.gray, 40))
+    table.cell(statusTable, 0, 17, "SL Streak", text_color=color.white, bgcolor=color.new(color.red, 40))
+    table.cell(statusTable, 1, 17, str.tostring(current_sl_streak) + "/" + str.tostring(max_sl_streak), text_color=color.white, bgcolor=color.new(color.gray, 40))
     
-    table.cell(statusTable, 0, 17, "User", text_color=color.white, bgcolor=color.new(color.navy, 40))
-    table.cell(statusTable, 1, 17, user_login, text_color=color.white, bgcolor=color.new(color.gray, 40))
+    table.cell(statusTable, 0, 18, "User", text_color=color.white, bgcolor=color.new(color.navy, 40))
+    table.cell(statusTable, 1, 18, user_login, text_color=color.white, bgcolor=color.new(color.gray, 40))
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // VISUAL PLOTTING - UPDATED FOR 3 STRATEGIES INCLUDING BIAS
@@ -1594,6 +1617,13 @@ bias_blocks_sell = enable_bias_confluence and (bb_sell_base or bearish_breakdown
 
 plotshape(bias_blocks_buy, title='Bias Blocks Buy Signal', style=shape.xcross, location=location.belowbar, color=color.red, text='BIAS BLOCKS\nBUY', textcolor=color.white, size=size.small)
 plotshape(bias_blocks_sell, title='Bias Blocks Sell Signal', style=shape.xcross, location=location.abovebar, color=color.red, text='BIAS BLOCKS\nSELL', textcolor=color.white, size=size.small)
+
+// GLOBAL CANDLE COLOR CONFLUENCE WARNING SIGNALS
+candle_color_blocks_buy = enable_global_candle_color and (bb_buy_base or bullish_breakout_base or tbh_buy_condition_base) and not isGlobalCandleColorValid(true)
+candle_color_blocks_sell = enable_global_candle_color and (bb_sell_base or bearish_breakdown_base or tbh_sell_condition_base) and not isGlobalCandleColorValid(false)
+
+plotshape(candle_color_blocks_buy, title='Global Candle Color Blocks Buy Signal', style=shape.xcross, location=location.belowbar, color=color.yellow, text='CANDLE COLOR\nBLOCKS BUY', textcolor=color.black, size=size.small)
+plotshape(candle_color_blocks_sell, title='Global Candle Color Blocks Sell Signal', style=shape.xcross, location=location.abovebar, color=color.yellow, text='CANDLE COLOR\nBLOCKS SELL', textcolor=color.black, size=size.small)
 
 // Calculate ATR for proper spacing
 atr_value = ta.atr(20) * 2
@@ -1848,6 +1878,15 @@ if bias_blocks_buy
 if bias_blocks_sell
     alert("BIAS BLOCKS SELL SIGNAL: Current bias is " + current_nifty_bias + " but SELL signal detected | Bias confluence is enabled | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
+// Global Candle Color Confluence Alerts
+if candle_color_blocks_buy
+    prev_candle_color = close[1] > open[1] ? "GREEN" : close[1] < open[1] ? "RED" : "DOJI"
+    alert("GLOBAL CANDLE COLOR BLOCKS BUY SIGNAL: Previous candle is " + prev_candle_color + " but GREEN required for BUY signals | Global candle color confluence is enabled | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
+if candle_color_blocks_sell
+    prev_candle_color = close[1] > open[1] ? "GREEN" : close[1] < open[1] ? "RED" : "DOJI"
+    alert("GLOBAL CANDLE COLOR BLOCKS SELL SIGNAL: Previous candle is " + prev_candle_color + " but RED required for SELL signals | Global candle color confluence is enabled | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
 // Alert Conditions for all 3 strategies
 alertcondition(alert_above_upper and enable_bb_strategy, 'BB Alert Above Upper Band', 'BB Alert Candle Above Upper Band')
 alertcondition(alert_below_lower and enable_bb_strategy, 'BB Alert Below Lower Band', 'BB Alert Candle Below Lower Band')
@@ -1881,6 +1920,10 @@ alertcondition(current_nifty_bias == "BULL", 'Nifty Bias Bull', 'Nifty bias turn
 alertcondition(current_nifty_bias == "BEAR", 'Nifty Bias Bear', 'Nifty bias turned bearish')
 alertcondition(current_nifty_bias == "SIDEWAYS", 'Nifty Bias Sideways', 'Nifty bias is sideways')
 
+// Global Candle Color Confluence Alert Conditions
+alertcondition(candle_color_blocks_buy, 'Global Candle Color Blocks Buy Signal', 'Buy signal blocked due to previous candle not being green')
+alertcondition(candle_color_blocks_sell, 'Global Candle Color Blocks Sell Signal', 'Sell signal blocked due to previous candle not being red')
+
 // Background highlighting for various conditions
 bgcolor(alert_above_upper and enable_bb_strategy ? color.new(color.orange, 90) : na, title="BB Alert Above Upper")
 bgcolor(alert_below_lower and enable_bb_strategy ? color.new(color.purple, 90) : na, title="BB Alert Below Lower")
@@ -1893,6 +1936,10 @@ bgcolor(bias_blocks_buy ? color.new(color.red, 85) : na, title="Bias Blocks Buy 
 bgcolor(bias_blocks_sell ? color.new(color.red, 85) : na, title="Bias Blocks Sell Signal")
 bgcolor(enable_bias_confluence and current_nifty_bias == "BULL" ? color.new(color.green, 95) : na, title="Bull Bias Active")
 bgcolor(enable_bias_confluence and current_nifty_bias == "BEAR" ? color.new(color.red, 95) : na, title="Bear Bias Active")
+
+// Global candle color confluence background highlighting
+bgcolor(candle_color_blocks_buy ? color.new(color.yellow, 85) : na, title="Global Candle Color Blocks Buy Signal")
+bgcolor(candle_color_blocks_sell ? color.new(color.yellow, 85) : na, title="Global Candle Color Blocks Sell Signal")
 
 // Highlight Supertrend direction changes and activation
 bgcolor(tbh_direction != tbh_direction[1] and enable_tbh_strategy and show_tbh_supertrend ? color.new(color.blue, 95) : na, title="Supertrend Direction Change")
