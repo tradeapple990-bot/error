@@ -25,6 +25,7 @@ normal_open = request.security(base_ticker, timeframe.period, open, lookahead=ba
 enable_bb_strategy = input.bool(false, title="✅ Enable Bollinger Band Reversal Strategy", group="Strategy Toggles")
 enable_breakout_strategy = input.bool(false, title="✅ Enable Breakout Strategy", group="Strategy Toggles")
 enable_tbh_strategy = input.bool(true, title="✅ Enable Top Bottom Hunter Strategy", group="Strategy Toggles")
+enable_heikin_ashi_strategy = input.bool(true, title="✅ Enable Enhanced Heikin Ashi Trend Strategy", group="Strategy Toggles")
 
 // BIAS CONFLUENCE TOGGLE
 enable_bias_confluence = input.bool(true, title="✅ Enable Nifty Bias Confluence", tooltip="Requires BULL bias for BUY signals and BEAR bias for SELL signals", group="Strategy Toggles")
@@ -290,6 +291,27 @@ show_tbh_supertrend = input.bool(true, title="Show Supertrend Lines", group="Top
 tbh_enable_alerts = input.bool(true, title="Enable TBH Alerts", group="Top Bottom Hunter Strategy")
 
 // ═══════════════════════════════════════════════════════════════════════════════════
+// ENHANCED HEIKIN ASHI TREND INDICATOR STRATEGY
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Heikin Ashi Settings
+ha_length = input.int(14, title="HA Trend Length", minval=1, maxval=50, group="Heikin Ashi Strategy")
+ha_multiplier = input.float(2.0, title="HA Trend Multiplier", minval=0.1, step=0.1, group="Heikin Ashi Strategy")
+
+// Exit Logic Settings
+ha_exit_on_last_star = input.bool(true, title="✅ Exit on Last Same-Color Star", tooltip="BUY exits on last green star, SELL exits on last red star", group="Heikin Ashi Strategy")
+ha_early_exit_warning = input.bool(false, title="✅ Enable Early Exit Warning (2nd About to Exit Star)", tooltip="Shows warning when approaching exit condition", group="Heikin Ashi Strategy")
+
+// Stop Loss and Take Profit Settings
+ha_sl_points = input.float(25.0, title="Stop Loss Points", minval=5.0, maxval=100.0, group="Heikin Ashi Strategy")
+ha_tp_points = input.float(50.0, title="Take Profit Points", minval=10.0, maxval=200.0, group="Heikin Ashi Strategy")
+
+// Display Settings
+show_ha_stars = input.bool(true, title="Show HA Trend Stars", group="Heikin Ashi Strategy")
+show_ha_trend_line = input.bool(true, title="Show HA Trend Line", group="Heikin Ashi Strategy")
+ha_enable_alerts = input.bool(true, title="Enable HA Alerts", group="Heikin Ashi Strategy")
+
+// ═══════════════════════════════════════════════════════════════════════════════════
 // GLOBAL DISPLAY SETTINGS
 // ═══════════════════════════════════════════════════════════════════════════════════
 
@@ -458,6 +480,7 @@ var bool any_strategy_active = false
 var bool bb_signal_this_bar = false
 var bool breakout_signal_this_bar = false
 var bool tbh_signal_this_bar = false
+var bool ha_signal_this_bar = false
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // BOLLINGER BAND CALCULATIONS WITH IMPROVED SL LOGIC
@@ -755,25 +778,111 @@ var float tbh_trade_points_tp = 0.0
 var float tbh_trade_points_sl = 0.0
 
 // ═══════════════════════════════════════════════════════════════════════════════════
+// ENHANCED HEIKIN ASHI TREND INDICATOR CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Heikin Ashi Calculations
+var float ha_open = na
+var float ha_close = na
+var float ha_high = na
+var float ha_low = na
+
+// Calculate Heikin Ashi values
+ha_close := (open + high + low + close) / 4
+ha_open := na(ha_open[1]) ? (open + close) / 2 : (ha_open[1] + ha_close[1]) / 2
+ha_high := math.max(high, math.max(ha_open, ha_close))
+ha_low := math.min(low, math.min(ha_open, ha_close))
+
+// Calculate HA trend using ATR-based system
+ha_atr = ta.atr(ha_length)
+ha_hl2 = (ha_high + ha_low) / 2
+
+// Calculate trend bands
+ha_upper_band = ha_hl2 + (ha_multiplier * ha_atr)
+ha_lower_band = ha_hl2 - (ha_multiplier * ha_atr)
+
+// Trend calculation
+var float ha_trend = na
+var int ha_trend_direction = 0
+
+ha_trend := ha_close > ha_upper_band[1] ? ha_lower_band : ha_close < ha_lower_band[1] ? ha_upper_band : ha_trend[1]
+ha_trend_direction := ha_close > ha_trend ? 1 : ha_close < ha_trend ? -1 : ha_trend_direction[1]
+
+// Star signal conditions
+ha_green_star = ha_trend_direction == 1 and ha_trend_direction[1] != 1
+ha_red_star = ha_trend_direction == -1 and ha_trend_direction[1] != -1
+
+// Detect consecutive star patterns for exit logic
+var int ha_consecutive_green_stars = 0
+var int ha_consecutive_red_stars = 0
+var bool ha_last_green_star_signal = false
+var bool ha_last_red_star_signal = false
+
+// Count consecutive stars
+if ha_green_star
+    ha_consecutive_green_stars := ha_consecutive_green_stars + 1
+    ha_consecutive_red_stars := 0
+else if ha_red_star
+    ha_consecutive_red_stars := ha_consecutive_red_stars + 1
+    ha_consecutive_green_stars := 0
+
+// Detect last star in sequence (when trend is about to change)
+ha_about_to_exit_green = ha_trend_direction == 1 and ha_close < ha_trend and ha_consecutive_green_stars >= 2
+ha_about_to_exit_red = ha_trend_direction == -1 and ha_close > ha_trend and ha_consecutive_red_stars >= 2
+
+// Last star detection for exit
+ha_last_green_star_signal := ha_about_to_exit_green and not ha_about_to_exit_green[1]
+ha_last_red_star_signal := ha_about_to_exit_red and not ha_about_to_exit_red[1]
+
+// Early exit warning (2nd about to exit star)
+ha_early_exit_green_warning = ha_early_exit_warning and ha_trend_direction == 1 and ha_consecutive_green_stars >= 1 and ha_about_to_exit_green
+ha_early_exit_red_warning = ha_early_exit_warning and ha_trend_direction == -1 and ha_consecutive_red_stars >= 1 and ha_about_to_exit_red
+
+// HA Trade Management Variables
+var bool ha_in_trade = false
+var string ha_trade_type = ""
+var float ha_entry_price = na
+var float ha_stop_loss = na
+var float ha_take_profit = na
+var int ha_entry_bar_index = na
+
+// HA Trade Exit Flags
+var bool ha_tp_hit = false
+var bool ha_sl_hit = false
+var bool ha_315_exit = false
+var float ha_trade_points_tp = 0.0
+var float ha_trade_points_sl = 0.0
+
+// Individual strategy counters for HA
+var int ha_tp_count = 0
+var int ha_sl_count = 0
+
+// ═══════════════════════════════════════════════════════════════════════════════════
 // ENHANCED OVERLAP FILTER LOGIC - NOW WITH 3 STRATEGIES
 // ═══════════════════════════════════════════════════════════════════════════════════
 
 // Update active trade status FIRST
-any_strategy_active := bb_in_trade or breakout_in_trade or tbh_in_trade
+any_strategy_active := bb_in_trade or breakout_in_trade or tbh_in_trade or ha_in_trade
 
 // Reset overlap tracking at start of each bar
 bb_signal_this_bar := false
 breakout_signal_this_bar := false
 tbh_signal_this_bar := false
+ha_signal_this_bar := false
 
 // Base signal conditions (without overlap filtering) - WITH TIME EXCLUSION AND BIAS
 bb_sell_base = bb_waiting_for_entry and bb_alert_is_above_upper and close < bb_alert_candle_low and enable_bb_strategy and not isEntryBlocked() and isBiasAllowedForSell() and isGlobalCandleColorValid(false)
 bb_buy_base = bb_waiting_for_entry and not bb_alert_is_above_upper and close > bb_alert_candle_high and enable_bb_strategy and not isEntryBlocked() and isBiasAllowedForBuy() and isGlobalCandleColorValid(true)
 
+// HA signal conditions
+ha_buy_base = ha_green_star and not ha_in_trade and enable_heikin_ashi_strategy and not isEntryBlocked() and isBiasAllowedForBuy() and isGlobalCandleColorValid(true)
+ha_sell_base = ha_red_star and not ha_in_trade and enable_heikin_ashi_strategy and not isEntryBlocked() and isBiasAllowedForSell() and isGlobalCandleColorValid(false)
+
 // Check for potential signals
 bb_has_signal = (bb_sell_base or bb_buy_base) and enable_bb_strategy
 breakout_has_signal = (bullish_breakout_base or bearish_breakdown_base) and enable_breakout_strategy
 tbh_has_signal = (tbh_buy_condition_base or tbh_sell_condition_base) and enable_tbh_strategy
+ha_has_signal = (ha_buy_base or ha_sell_base) and enable_heikin_ashi_strategy
 
 // Count how many strategies want to signal this bar
 signals_count = 0
@@ -783,6 +892,8 @@ if breakout_has_signal
     signals_count := signals_count + 1
 if tbh_has_signal
     signals_count := signals_count + 1
+if ha_has_signal
+    signals_count := signals_count + 1
 
 // ENHANCED OVERLAP FILTER CONDITIONS:
 // 1. If overlap filter is disabled, allow all signals
@@ -791,10 +902,11 @@ if tbh_has_signal
 overlap_filter_blocks_all = enable_overlap_filter and any_strategy_active
 same_bar_overlap = enable_overlap_filter and signals_count > 1 and not any_strategy_active
 
-// Priority: BB > TBH > Breakout
+// Priority: BB > HA > TBH > Breakout
 bb_signal_allowed = not overlap_filter_blocks_all and (not same_bar_overlap or (same_bar_overlap and bb_has_signal))
-tbh_signal_allowed = not overlap_filter_blocks_all and (not same_bar_overlap or (same_bar_overlap and tbh_has_signal and not bb_has_signal))
-breakout_signal_allowed = not overlap_filter_blocks_all and (not same_bar_overlap or (same_bar_overlap and breakout_has_signal and not bb_has_signal and not tbh_has_signal))
+ha_signal_allowed = not overlap_filter_blocks_all and (not same_bar_overlap or (same_bar_overlap and ha_has_signal and not bb_has_signal))
+tbh_signal_allowed = not overlap_filter_blocks_all and (not same_bar_overlap or (same_bar_overlap and tbh_has_signal and not bb_has_signal and not ha_has_signal))
+breakout_signal_allowed = not overlap_filter_blocks_all and (not same_bar_overlap or (same_bar_overlap and breakout_has_signal and not bb_has_signal and not ha_has_signal and not tbh_has_signal))
 
 // Final signal determination
 bullish_breakout = bullish_breakout_base and breakout_signal_allowed
@@ -803,6 +915,8 @@ bb_sell_entry = bb_sell_base and bb_signal_allowed
 bb_buy_entry = bb_buy_base and bb_signal_allowed
 tbh_buy_condition = tbh_buy_condition_base and tbh_signal_allowed
 tbh_sell_condition = tbh_sell_condition_base and tbh_signal_allowed
+ha_buy_entry = ha_buy_base and ha_signal_allowed
+ha_sell_entry = ha_sell_base and ha_signal_allowed
 
 // Update signal tracking flags
 if bullish_breakout or bearish_breakdown
@@ -811,6 +925,8 @@ if bb_sell_entry or bb_buy_entry
     bb_signal_this_bar := true
 if tbh_buy_condition or tbh_sell_condition
     tbh_signal_this_bar := true
+if ha_buy_entry or ha_sell_entry
+    ha_signal_this_bar := true
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // TRADE MANAGEMENT AND POSITION UPDATES
@@ -923,6 +1039,23 @@ if tbh_buy_condition and not tbh_in_trade
     
     // Start with initial SL
     tbh_current_sl := tbh_initial_sl
+
+// HA Entry Logic
+if ha_buy_entry and not ha_in_trade
+    ha_in_trade := true
+    ha_trade_type := "BUY"
+    ha_entry_price := normal_close
+    ha_entry_bar_index := bar_index
+    ha_stop_loss := ha_entry_price - ha_sl_points
+    ha_take_profit := ha_entry_price + ha_tp_points
+
+if ha_sell_entry and not ha_in_trade
+    ha_in_trade := true
+    ha_trade_type := "SELL"
+    ha_entry_price := normal_close
+    ha_entry_bar_index := bar_index
+    ha_stop_loss := ha_entry_price + ha_sl_points
+    ha_take_profit := ha_entry_price - ha_tp_points
 
 if tbh_sell_condition and not tbh_in_trade
     tbh_in_trade := true
@@ -1039,6 +1172,70 @@ if tbh_in_trade and bar_index > tbh_entry_bar_index and not tbh_315_exit
                     tbh_sl_hit := true
                     tbh_in_trade := false
                     tbh_trade_points_sl := tbh_current_sl - tbh_entry_price
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// HA EXIT MANAGEMENT - ENHANCED EXIT LOGIC
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// HA Exit Logic - Updated to exit on LAST same-color star
+if ha_in_trade and bar_index > ha_entry_bar_index and not ha_315_exit
+    should_exit_ha = false
+    
+    if ha_exit_on_last_star
+        // New exit logic: Exit on LAST same-color star
+        if ha_trade_type == "BUY"
+            // Exit BUY positions on last green star (when trend is about to change from green to red)
+            should_exit_ha := ha_last_green_star_signal
+        else if ha_trade_type == "SELL"
+            // Exit SELL positions on last red star (when trend is about to change from red to green)
+            should_exit_ha := ha_last_red_star_signal
+    else
+        // Original exit logic: Exit on first opposing color star
+        if ha_trade_type == "BUY"
+            // Exit BUY positions on first red star
+            should_exit_ha := ha_red_star
+        else if ha_trade_type == "SELL"
+            // Exit SELL positions on first green star  
+            should_exit_ha := ha_green_star
+    
+    // Check for regular TP/SL hits
+    if not should_exit_ha
+        if ha_trade_type == "BUY"
+            if normal_low <= ha_stop_loss
+                ha_sl_hit := true
+                ha_in_trade := false
+                ha_trade_points_sl := ha_entry_price - ha_stop_loss
+            else if normal_high >= ha_take_profit
+                ha_tp_hit := true
+                ha_in_trade := false
+                ha_trade_points_tp := ha_take_profit - ha_entry_price
+        else if ha_trade_type == "SELL"
+            if normal_high >= ha_stop_loss
+                ha_sl_hit := true
+                ha_in_trade := false
+                ha_trade_points_sl := ha_stop_loss - ha_entry_price
+            else if normal_low <= ha_take_profit
+                ha_tp_hit := true
+                ha_in_trade := false
+                ha_trade_points_tp := ha_entry_price - ha_take_profit
+    
+    // Exit on star signal
+    if should_exit_ha
+        ha_tp_hit := true
+        ha_in_trade := false
+        if ha_trade_type == "BUY"
+            ha_trade_points_tp := normal_close - ha_entry_price
+        else
+            ha_trade_points_tp := ha_entry_price - normal_close
+
+// 3:15 PM Auto Exit for HA
+if ha_in_trade and isAfter315PM()
+    ha_315_exit := true
+    ha_in_trade := false
+    if ha_trade_type == "BUY"
+        ha_trade_points_tp := normal_close - ha_entry_price
+    else
+        ha_trade_points_tp := ha_entry_price - normal_close
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // TRADE EXIT MANAGEMENT (BB & BREAKOUT)
@@ -1284,17 +1481,60 @@ if tbh_sl_hit
         max_sl_streak := current_sl_streak
         max_sl_streak_points := current_sl_streak_points
 
+// HA Performance Updates
+if ha_tp_hit or ha_315_exit
+    points_to_add = ha_315_exit ? math.abs(ha_trade_points_tp) : math.abs(ha_trade_points_tp)
+    is_tp = ha_315_exit ? (ha_trade_points_tp > 0) : true
+    
+    array.push(combined_trade_months, month(time))
+    array.push(combined_trade_years, year(time))
+    array.push(combined_trade_was_tp, is_tp)
+    array.push(combined_trade_points, points_to_add)
+    array.push(combined_trade_strategy, "HA")
+    
+    if is_tp
+        combined_total_tp_count += 1
+        combined_total_tp_points += points_to_add
+        ha_tp_count += 1
+        current_sl_streak := 0
+        current_sl_streak_points := 0.0
+    else
+        combined_total_sl_count += 1
+        combined_total_sl_points += points_to_add
+        ha_sl_count += 1
+        current_sl_streak += 1
+        current_sl_streak_points += points_to_add
+        if current_sl_streak > max_sl_streak
+            max_sl_streak := current_sl_streak
+            max_sl_streak_points := current_sl_streak_points
+
+if ha_sl_hit
+    array.push(combined_trade_months, month(time))
+    array.push(combined_trade_years, year(time))
+    array.push(combined_trade_was_tp, false)
+    array.push(combined_trade_points, math.abs(ha_trade_points_sl))
+    array.push(combined_trade_strategy, "HA")
+    
+    combined_total_sl_count += 1
+    combined_total_sl_points += math.abs(ha_trade_points_sl)
+    ha_sl_count += 1
+    current_sl_streak += 1
+    current_sl_streak_points += math.abs(ha_trade_points_sl)
+    if current_sl_streak > max_sl_streak
+        max_sl_streak := current_sl_streak
+        max_sl_streak_points := current_sl_streak_points
+
 // ═══════════════════════════════════════════════════════════════════════════════════
-// ENHANCED PERFORMANCE TABLE - UPDATED WITH 3 STRATEGIES
+// ENHANCED PERFORMANCE TABLE - UPDATED WITH 4 STRATEGIES
 // ═══════════════════════════════════════════════════════════════════════════════════
 
 if barstate.islast and show_performance_table
     current_month = month(time)
     current_year = year(time)
     
-    var performanceTable = table.new(getTablePosition(table_position), 13, 15, bgcolor=color.new(color.black, 20), border_width=1)
+    var performanceTable = table.new(getTablePosition(table_position), 14, 15, bgcolor=color.new(color.black, 20), border_width=1)
     
-    // Header row with 3 strategies - UPDATED STRUCTURE
+    // Header row with 4 strategies - UPDATED STRUCTURE
     table.cell(performanceTable, 0, 0, 'Month & Year', text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
     table.cell(performanceTable, 1, 0, 'TP Trades', text_color=color.white, text_size=size.small, bgcolor=color.new(color.green, 60))
     table.cell(performanceTable, 2, 0, 'SL Trades', text_color=color.white, text_size=size.small, bgcolor=color.new(color.red, 60))
@@ -1308,6 +1548,7 @@ if barstate.islast and show_performance_table
     table.cell(performanceTable, 10, 0, 'SL Streak Pts', text_color=color.white, text_size=size.small, bgcolor=color.new(color.maroon, 80))
     table.cell(performanceTable, 11, 0, 'BB Trades', text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
     table.cell(performanceTable, 12, 0, 'TBH-TRAIL', text_color=color.white, text_size=size.small, bgcolor=color.new(color.lime, 60))
+    table.cell(performanceTable, 13, 0, 'HA-TREND', text_color=color.white, text_size=size.small, bgcolor=color.new(color.orange, 60))
     
     grand_tp_trades = 0
     grand_sl_trades = 0
@@ -1332,6 +1573,7 @@ if barstate.islast and show_performance_table
         month_bb_trades = 0
         month_tbh_trades = 0
         month_breakout_trades = 0
+        month_ha_trades = 0
         month_max_sl_streak = 0
         month_sl_streak_points = 0.0
         
@@ -1376,6 +1618,8 @@ if barstate.islast and show_performance_table
                         month_tbh_trades := month_tbh_trades + 1
                     else if strategy == "BREAKOUT"
                         month_breakout_trades := month_breakout_trades + 1
+                    else if strategy == "HA"
+                        month_ha_trades := month_ha_trades + 1
         
         // Calculations
         net_pts = month_tp_points - month_sl_points
@@ -1406,6 +1650,7 @@ if barstate.islast and show_performance_table
         table.cell(performanceTable, 10, row, str.tostring(math.round(month_max_sl_streak_points)), text_color=color.white, text_size=size.small)
         table.cell(performanceTable, 11, row, str.tostring(month_bb_trades), text_color=color.white, text_size=size.small)
         table.cell(performanceTable, 12, row, str.tostring(month_tbh_trades), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 13, row, str.tostring(month_ha_trades), text_color=color.white, text_size=size.small)
     
     // Total row - UPDATED STRUCTURE
     grand_net_pts = grand_tp_points - grand_sl_points
@@ -1427,145 +1672,35 @@ if barstate.islast and show_performance_table
     table.cell(performanceTable, 10, 13, str.tostring(math.round(max_sl_streak_points)), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
     table.cell(performanceTable, 11, 13, str.tostring(bb_tp_count + bb_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
     table.cell(performanceTable, 12, 13, str.tostring(tbh_tp_count + tbh_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 13, 13, str.tostring(ha_tp_count + ha_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
     
-    // Strategy Summary Row - UPDATED WITH 3 STRATEGIES
+    // Strategy Summary Row - UPDATED WITH 4 STRATEGIES
     table.cell(performanceTable, 0, 14, 'STRATEGIES', text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 60))
     table.cell(performanceTable, 1, 14, 'BB: ' + str.tostring(bb_tp_count) + '/' + str.tostring(bb_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
     table.cell(performanceTable, 2, 14, 'TBH-TRAIL: ' + str.tostring(tbh_tp_count) + '/' + str.tostring(tbh_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.lime, 60))
     table.cell(performanceTable, 3, 14, 'BRK: ' + str.tostring(breakout_tp_count) + '/' + str.tostring(breakout_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.orange, 60))
-    table.cell(performanceTable, 4, 14, 'BIAS: ' + current_nifty_bias, text_color=color.white, text_size=size.small, bgcolor=current_nifty_bias == "BULL" ? color.new(color.green, 60) : current_nifty_bias == "BEAR" ? color.new(color.red, 60) : color.new(color.orange, 60))
+    table.cell(performanceTable, 4, 14, 'HA: ' + str.tostring(ha_tp_count) + '/' + str.tostring(ha_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.fuchsia, 60))
+    table.cell(performanceTable, 5, 14, 'BIAS: ' + current_nifty_bias, text_color=color.white, text_size=size.small, bgcolor=current_nifty_bias == "BULL" ? color.new(color.green, 60) : current_nifty_bias == "BEAR" ? color.new(color.red, 60) : color.new(color.orange, 60))
     
-    // Enable/Disable Status - UPDATED WITH 3 STRATEGIES + BIAS + GLOBAL CANDLE COLOR
+    // Enable/Disable Status - UPDATED WITH 4 STRATEGIES + BIAS + GLOBAL CANDLE COLOR
     bb_status = enable_bb_strategy ? "ON" : "OFF"
     tbh_status = enable_tbh_strategy ? "ON" : "OFF"
     breakout_status = enable_breakout_strategy ? "ON" : "OFF"
+    ha_status = enable_heikin_ashi_strategy ? "ON" : "OFF"
     bias_status = enable_bias_confluence ? "ON" : "OFF"
     global_candle_status = enable_global_candle_color ? "ON" : "OFF"
     
-    table.cell(performanceTable, 5, 14, bb_status, text_color=color.white, text_size=size.small, bgcolor=enable_bb_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 6, 14, tbh_status, text_color=color.white, text_size=size.small, bgcolor=enable_tbh_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 7, 14, breakout_status, text_color=color.white, text_size=size.small, bgcolor=enable_breakout_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 8, 14, bias_status, text_color=color.white, text_size=size.small, bgcolor=enable_bias_confluence ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 9, 14, user_login, text_color=color.white, text_size=size.small, bgcolor=color.new(color.navy, 60))
-    table.cell(performanceTable, 10, 14, global_candle_status, text_color=color.white, text_size=size.small, bgcolor=enable_global_candle_color ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 11, 14, 'OVERLAP', text_color=color.white, text_size=size.small, bgcolor=enable_overlap_filter ? color.new(color.green, 60) : color.new(color.red, 60))
-    table.cell(performanceTable, 12, 14, 'v17.1-GLOBAL', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 6, 14, bb_status, text_color=color.white, text_size=size.small, bgcolor=enable_bb_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 7, 14, tbh_status, text_color=color.white, text_size=size.small, bgcolor=enable_tbh_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 8, 14, breakout_status, text_color=color.white, text_size=size.small, bgcolor=enable_breakout_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 9, 14, ha_status, text_color=color.white, text_size=size.small, bgcolor=enable_heikin_ashi_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 10, 14, bias_status, text_color=color.white, text_size=size.small, bgcolor=enable_bias_confluence ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 11, 14, user_login, text_color=color.white, text_size=size.small, bgcolor=color.new(color.navy, 60))
+    table.cell(performanceTable, 12, 14, global_candle_status, text_color=color.white, text_size=size.small, bgcolor=enable_global_candle_color ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 13, 14, 'v18.0-HA-TREND', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
 
 // ═══════════════════════════════════════════════════════════════════════════════════
-// ENHANCED STATUS TABLE - UPDATED FOR 3 STRATEGIES INCLUDING BIAS
-// ═══════════════════════════════════════════════════════════════════════════════════
-
-var statusTable = table.new(position.top_right, 2, 19, bgcolor=color.new(color.black, 20), border_width=2)
-if barstate.islast
-    table.cell(statusTable, 0, 0, "Parameter", text_color=color.white, bgcolor=color.new(color.blue, 60))
-    table.cell(statusTable, 1, 0, "Value", text_color=color.white, bgcolor=color.new(color.blue, 60))
-    
-    // Active trades status
-    active_trades = ""
-    if bb_in_trade
-        active_trades := active_trades + "BB:" + bb_trade_type + " "
-    if breakout_in_trade
-        active_trades := active_trades + "BRK:" + breakout_trade_type + " "
-    if tbh_in_trade
-        active_trades := active_trades + "TBH-TRAIL:" + tbh_trade_type + " "
-    
-    if active_trades == ""
-        active_trades := "NONE"
-    
-    table.cell(statusTable, 0, 1, "Active Trades", text_color=color.white, bgcolor=color.new(color.green, 40))
-    table.cell(statusTable, 1, 1, active_trades, text_color=color.white, bgcolor=color.new(color.green, 40))
-    
-    // Strategy status
-    strategies_enabled = ""
-    if enable_bb_strategy
-        strategies_enabled := strategies_enabled + "BB "
-    if enable_breakout_strategy
-        strategies_enabled := strategies_enabled + "BRK "
-    if enable_tbh_strategy
-        strategies_enabled := strategies_enabled + "TBH-TRAIL "
-    
-    table.cell(statusTable, 0, 2, "Enabled", text_color=color.white, bgcolor=color.new(color.blue, 40))
-    table.cell(statusTable, 1, 2, strategies_enabled, text_color=color.white, bgcolor=color.new(color.blue, 40))
-    
-    // BIAS CONFLUENCE STATUS
-    table.cell(statusTable, 0, 3, "Bias Confluence", text_color=color.white, bgcolor=color.new(color.purple, 40))
-    bias_status_text = enable_bias_confluence ? "ON" : "OFF"
-    table.cell(statusTable, 1, 3, bias_status_text, text_color=color.white, bgcolor=enable_bias_confluence ? color.new(color.green, 40) : color.new(color.red, 40))
-    
-    table.cell(statusTable, 0, 4, "Current Bias", text_color=color.white, bgcolor=color.new(color.orange, 40))
-    bias_color = current_nifty_bias == "BULL" ? color.new(color.green, 40) : current_nifty_bias == "BEAR" ? color.new(color.red, 40) : color.new(color.orange, 40)
-    table.cell(statusTable, 1, 4, current_nifty_bias, text_color=color.white, bgcolor=bias_color)
-    
-    // GLOBAL CANDLE COLOR CONFLUENCE STATUS
-    table.cell(statusTable, 0, 5, "Global Candle Color", text_color=color.white, bgcolor=color.new(color.yellow, 40))
-    global_candle_status_text = enable_global_candle_color ? "ON" : "OFF"
-    table.cell(statusTable, 1, 5, global_candle_status_text, text_color=color.white, bgcolor=enable_global_candle_color ? color.new(color.green, 40) : color.new(color.red, 40))
-    
-    // ENHANCED OVERLAP FILTER STATUS
-    table.cell(statusTable, 0, 6, "Overlap Filter", text_color=color.white, bgcolor=color.new(color.purple, 40))
-    overlap_status = enable_overlap_filter ? "ON" : "OFF"
-    table.cell(statusTable, 1, 6, overlap_status, text_color=color.white, bgcolor=enable_overlap_filter ? color.new(color.green, 40) : color.new(color.red, 40))
-    
-    table.cell(statusTable, 0, 7, "Any Trade Active", text_color=color.white, bgcolor=color.new(color.orange, 40))
-    active_status = any_strategy_active ? "YES" : "NO"
-    active_color = any_strategy_active ? color.new(color.red, 40) : color.new(color.green, 40)
-    table.cell(statusTable, 1, 7, active_status, text_color=color.white, bgcolor=active_color)
-    
-    table.cell(statusTable, 0, 8, "3:15 Exit", text_color=color.white, bgcolor=color.new(color.orange, 40))
-    exit_315_status = enable_315_exit ? "ON" : "OFF"
-    table.cell(statusTable, 1, 8, exit_315_status, text_color=color.white, bgcolor=enable_315_exit ? color.new(color.green, 40) : color.new(color.red, 40))
-    
-    // Signal overlap tracking
-    table.cell(statusTable, 0, 9, "Signals Count", text_color=color.white, bgcolor=color.new(color.yellow, 40))
-    table.cell(statusTable, 1, 9, str.tostring(signals_count), text_color=color.white, bgcolor=signals_count > 1 ? color.new(color.red, 40) : color.new(color.green, 40))
-    
-    // Overlap blocking status
-    table.cell(statusTable, 0, 10, "Overlap Blocks", text_color=color.white, bgcolor=color.new(color.red, 40))
-    blocks_status = overlap_filter_blocks_all ? "YES" : "NO"
-    blocks_color = overlap_filter_blocks_all ? color.new(color.red, 40) : color.new(color.green, 40)
-    table.cell(statusTable, 1, 10, blocks_status, text_color=color.white, bgcolor=blocks_color)
-    
-    // TBH Supertrend Activation Status
-    table.cell(statusTable, 0, 11, "TBH ST Activated", text_color=color.white, bgcolor=color.new(color.lime, 40))
-    tbh_activation_status = tbh_in_trade and tbh_supertrend_activated ? "YES" : "NO"
-    tbh_activation_color = tbh_in_trade and tbh_supertrend_activated ? color.new(color.green, 40) : color.new(color.gray, 40)
-    table.cell(statusTable, 1, 11, tbh_activation_status, text_color=color.white, bgcolor=tbh_activation_color)
-    
-    // TBH Current SL vs Initial SL
-    table.cell(statusTable, 0, 12, "TBH Current SL", text_color=color.white, bgcolor=color.new(color.lime, 40))
-    if tbh_in_trade
-        sl_color = tbh_supertrend_activated ? color.new(color.green, 40) : color.new(color.red, 40)
-        table.cell(statusTable, 1, 12, str.tostring(tbh_current_sl, "#.##"), text_color=color.white, bgcolor=sl_color)
-    else
-        table.cell(statusTable, 1, 12, "N/A", text_color=color.white, bgcolor=color.new(color.gray, 40))
-    
-    // TBH Initial SL
-    table.cell(statusTable, 0, 13, "TBH Initial SL", text_color=color.white, bgcolor=color.new(color.orange, 40))
-    if tbh_in_trade
-        table.cell(statusTable, 1, 13, str.tostring(tbh_initial_sl, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
-    else
-        table.cell(statusTable, 1, 13, "N/A", text_color=color.white, bgcolor=color.new(color.gray, 40))
-    
-    // TBH Supertrend Current Value
-    table.cell(statusTable, 0, 14, "TBH Supertrend", text_color=color.white, bgcolor=color.new(color.lime, 40))
-    st_color = tbh_direction == -1 ? color.new(color.green, 40) : color.new(color.red, 40)
-    table.cell(statusTable, 1, 14, str.tostring(tbh_supertrend, "#.##"), text_color=color.white, bgcolor=st_color)
-
-    table.cell(statusTable, 0, 15, "TBH Fib 0 (0.382)", text_color=color.white, bgcolor=color.new(color.red, 40))
-    table.cell(statusTable, 1, 15, str.tostring(tbh_fib_level_0, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
-
-    table.cell(statusTable, 0, 16, "TBH Fib 1 (0.618)", text_color=color.white, bgcolor=color.new(color.green, 40))
-    table.cell(statusTable, 1, 16, str.tostring(tbh_fib_level_1, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
-    
-    // SL Streak status
-    table.cell(statusTable, 0, 17, "SL Streak", text_color=color.white, bgcolor=color.new(color.red, 40))
-    table.cell(statusTable, 1, 17, str.tostring(current_sl_streak) + "/" + str.tostring(max_sl_streak), text_color=color.white, bgcolor=color.new(color.gray, 40))
-    
-    table.cell(statusTable, 0, 18, "User", text_color=color.white, bgcolor=color.new(color.navy, 40))
-    table.cell(statusTable, 1, 18, user_login, text_color=color.white, bgcolor=color.new(color.gray, 40))
-
-// ═══════════════════════════════════════════════════════════════════════════════════
-// VISUAL PLOTTING - UPDATED FOR 3 STRATEGIES INCLUDING BIAS
+// VISUAL PLOTTING - UPDATED FOR 4 STRATEGIES INCLUDING BIAS AND HA
 // ═══════════════════════════════════════════════════════════════════════════════════
 
 // Plot Supertrend lines only when TBH is enabled and display is on
@@ -1579,6 +1714,11 @@ plot(show_tbh_supertrend and enable_tbh_strategy ? tbh_supertrend : na, title="T
 // Plot ACTIVE stop loss levels ONLY when there are active trades
 plot(bb_in_trade and enable_bb_strategy ? bb_stop_loss : na, title="BB Stop Loss Level", color=color.red, linewidth=2, style=plot.style_linebr)
 plot(breakout_in_trade and enable_breakout_strategy ? breakout_stop_loss : na, title="Breakout Stop Loss Level", color=color.orange, linewidth=2, style=plot.style_linebr)
+plot(ha_in_trade and enable_heikin_ashi_strategy ? ha_stop_loss : na, title="HA Stop Loss Level", color=color.maroon, linewidth=2, style=plot.style_linebr)
+plot(ha_in_trade and enable_heikin_ashi_strategy ? ha_take_profit : na, title="HA Take Profit Level", color=color.green, linewidth=2, style=plot.style_linebr)
+
+// Plot HA Trend Line
+plot(show_ha_trend_line and enable_heikin_ashi_strategy ? ha_trend : na, title="HA Trend Line", color=ha_trend_direction == 1 ? color.green : color.red, linewidth=3)
 
 // Plot TBH Current SL and TP based on mode
 tbh_sl_color = if tbh_in_trade
@@ -1604,23 +1744,39 @@ plotshape(bearish_breakdown, style=shape.labeldown, color=color.red, location=lo
 plotshape(tbh_buy_condition, title="TBH Buy Signal", location=location.belowbar, color=color.lime, style=shape.labelup, text="TBH-TRAIL\nBUY", size=size.small)
 plotshape(tbh_sell_condition, title="TBH Sell Signal", location=location.abovebar, color=color.fuchsia, style=shape.labeldown, text="TBH-TRAIL\nSELL", size=size.small)
 
+// HA Signals and Stars
+plotshape(ha_buy_entry, title="HA Buy Signal", location=location.belowbar, color=color.green, style=shape.labelup, text="HA\nBUY", size=size.small)
+plotshape(ha_sell_entry, title="HA Sell Signal", location=location.abovebar, color=color.red, style=shape.labeldown, text="HA\nSELL", size=size.small)
+
+// HA Stars - Green and Red/Maroon
+plotshape(show_ha_stars and ha_green_star, title="HA Green Star", location=location.belowbar, style=shape.triangleup, color=color.green, size=size.small)
+plotshape(show_ha_stars and ha_red_star, title="HA Red Star", location=location.abovebar, style=shape.triangledown, color=color.red, size=size.small)
+
+// HA Early Exit Warning Stars
+plotshape(show_ha_stars and ha_early_exit_green_warning, title="HA Early Exit Green Warning", location=location.belowbar, style=shape.diamond, color=color.yellow, text="⚠️", size=size.tiny)
+plotshape(show_ha_stars and ha_early_exit_red_warning, title="HA Early Exit Red Warning", location=location.abovebar, style=shape.diamond, color=color.yellow, text="⚠️", size=size.tiny)
+
+// HA Last Star Signals (Exit Points)
+plotshape(show_ha_stars and ha_last_green_star_signal, title="HA Last Green Star", location=location.belowbar, style=shape.xcross, color=color.orange, size=size.small)
+plotshape(show_ha_stars and ha_last_red_star_signal, title="HA Last Red Star", location=location.abovebar, style=shape.xcross, color=color.orange, size=size.small)
+
 // ENHANCED OVERLAP WARNING SIGNALS
 overlap_detected = enable_overlap_filter and signals_count > 1 and not any_strategy_active
-active_trade_blocks = enable_overlap_filter and any_strategy_active and (bb_has_signal or breakout_has_signal or tbh_has_signal)
+active_trade_blocks = enable_overlap_filter and any_strategy_active and (bb_has_signal or breakout_has_signal or tbh_has_signal or ha_has_signal)
 
 plotshape(overlap_detected, title='Same Bar Multiple Signals', style=shape.xcross, location=location.top, color=color.yellow, text='SAME BAR\nOVERLAP', textcolor=color.black, size=size.small)
 plotshape(active_trade_blocks, title='Active Trade Blocks Signal', style=shape.xcross, location=location.bottom, color=color.orange, text='ACTIVE TRADE\nBLOCKS', textcolor=color.white, size=size.small)
 
 // BIAS CONFLUENCE WARNING SIGNALS
-bias_blocks_buy = enable_bias_confluence and (bb_buy_base or bullish_breakout_base or tbh_buy_condition_base) and current_nifty_bias != "BULL"
-bias_blocks_sell = enable_bias_confluence and (bb_sell_base or bearish_breakdown_base or tbh_sell_condition_base) and current_nifty_bias != "BEAR"
+bias_blocks_buy = enable_bias_confluence and (bb_buy_base or bullish_breakout_base or tbh_buy_condition_base or ha_buy_base) and current_nifty_bias != "BULL"
+bias_blocks_sell = enable_bias_confluence and (bb_sell_base or bearish_breakdown_base or tbh_sell_condition_base or ha_sell_base) and current_nifty_bias != "BEAR"
 
 plotshape(bias_blocks_buy, title='Bias Blocks Buy Signal', style=shape.xcross, location=location.belowbar, color=color.red, text='BIAS BLOCKS\nBUY', textcolor=color.white, size=size.small)
 plotshape(bias_blocks_sell, title='Bias Blocks Sell Signal', style=shape.xcross, location=location.abovebar, color=color.red, text='BIAS BLOCKS\nSELL', textcolor=color.white, size=size.small)
 
 // GLOBAL CANDLE COLOR CONFLUENCE WARNING SIGNALS
-candle_color_blocks_buy = enable_global_candle_color and (bb_buy_base or bullish_breakout_base or tbh_buy_condition_base) and not isGlobalCandleColorValid(true)
-candle_color_blocks_sell = enable_global_candle_color and (bb_sell_base or bearish_breakdown_base or tbh_sell_condition_base) and not isGlobalCandleColorValid(false)
+candle_color_blocks_buy = enable_global_candle_color and (bb_buy_base or bullish_breakout_base or tbh_buy_condition_base or ha_buy_base) and not isGlobalCandleColorValid(true)
+candle_color_blocks_sell = enable_global_candle_color and (bb_sell_base or bearish_breakdown_base or tbh_sell_condition_base or ha_sell_base) and not isGlobalCandleColorValid(false)
 
 plotshape(candle_color_blocks_buy, title='Global Candle Color Blocks Buy Signal', style=shape.xcross, location=location.belowbar, color=color.yellow, text='CANDLE COLOR\nBLOCKS BUY', textcolor=color.black, size=size.small)
 plotshape(candle_color_blocks_sell, title='Global Candle Color Blocks Sell Signal', style=shape.xcross, location=location.abovebar, color=color.yellow, text='CANDLE COLOR\nBLOCKS SELL', textcolor=color.black, size=size.small)
@@ -1714,6 +1870,33 @@ if tbh_315_exit
     label.new(x=bar_index, y=label_y, text=label_text + str.tostring(math.round(actual_315_points, 1)) + " pts", 
               style=label_style, color=color.new(color.orange, 0), textcolor=color.white, size=size.small)
 
+// HA TP/SL Labels
+if ha_tp_hit
+    actual_tp_points = math.abs(ha_trade_points_tp)
+    label_y = ha_trade_type == "BUY" ? high + atr_value : low - atr_value
+    label_style = ha_trade_type == "BUY" ? label.style_label_down : label.style_label_up
+    exit_method_text = ha_exit_on_last_star ? " (Last Star)" : " (Star Exit)"
+    
+    label.new(x=bar_index, y=label_y, text="✅ HA TP +" + str.tostring(math.round(actual_tp_points, 1)) + " pts" + exit_method_text, 
+              style=label_style, color=color.new(color.green, 0), textcolor=color.white, size=size.small)
+
+if ha_sl_hit
+    actual_sl_points = math.abs(ha_trade_points_sl)
+    label_y = ha_trade_type == "BUY" ? low - atr_value : high + atr_value
+    label_style = ha_trade_type == "BUY" ? label.style_label_up : label.style_label_down
+    
+    label.new(x=bar_index, y=label_y, text="❌ HA SL -" + str.tostring(math.round(actual_sl_points, 1)) + " pts", 
+              style=label_style, color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+
+if ha_315_exit
+    actual_315_points = math.abs(ha_trade_points_tp)
+    label_y = ha_trade_type == "BUY" ? high + atr_value : low - atr_value
+    label_style = ha_trade_type == "BUY" ? label.style_label_down : label.style_label_up
+    label_text = ha_trade_points_tp > 0 ? "🕒 HA 3:15 TP +" : "🕒 HA 3:15 SL -"
+    
+    label.new(x=bar_index, y=label_y, text=label_text + str.tostring(math.round(actual_315_points, 1)) + " pts", 
+              style=label_style, color=color.new(color.orange, 0), textcolor=color.white, size=size.small)
+
 // Highlight when TBH Supertrend trailing is active
 bgcolor(tbh_in_trade and tbh_supertrend_activated ? color.new(color.yellow, 90) : na, title="TBH Supertrend Trailing Active")
 
@@ -1738,6 +1921,12 @@ if tbh_sl_hit
     tbh_sl_hit := false
 if tbh_315_exit
     tbh_315_exit := false
+if ha_tp_hit
+    ha_tp_hit := false
+if ha_sl_hit
+    ha_sl_hit := false
+if ha_315_exit
+    ha_315_exit := false
 
 // Additional visual plots for clean display
 // Plot Bollinger Bands only when enabled
@@ -1859,16 +2048,42 @@ if tbh_enable_alerts and enable_tbh_strategy
     if tbh_in_trade and tbh_supertrend_activated and not tbh_supertrend_activated[1]
         alert("TBH-TRAIL SUPERTREND ACTIVATED: Supertrend now controls trailing SL | ST Level: " + str.tostring(tbh_supertrend, "#.##") + " | Previous Initial SL: " + str.tostring(tbh_initial_sl, "#.##") + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
-// Enhanced Overlap Filter Alerts (updated for 3 strategies)
+// HA Alerts
+if ha_enable_alerts and enable_heikin_ashi_strategy
+    if ha_buy_entry
+        alert("HA BUY SIGNAL: Green star detected at " + str.tostring(close, "#.##") + " | SL: " + str.tostring(ha_stop_loss, "#.##") + " | TP: " + str.tostring(ha_take_profit, "#.##") + " | Exit Mode: " + (ha_exit_on_last_star ? "Last Green Star" : "First Red Star") + " | BIAS: " + current_nifty_bias + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if ha_sell_entry
+        alert("HA SELL SIGNAL: Red star detected at " + str.tostring(close, "#.##") + " | SL: " + str.tostring(ha_stop_loss, "#.##") + " | TP: " + str.tostring(ha_take_profit, "#.##") + " | Exit Mode: " + (ha_exit_on_last_star ? "Last Red Star" : "First Green Star") + " | BIAS: " + current_nifty_bias + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if ha_tp_hit
+        exit_method = ha_exit_on_last_star ? "Last same-color star exit" : "Standard TP"
+        alert("HA TAKE PROFIT: " + exit_method + " with profit +" + str.tostring(math.abs(ha_trade_points_tp), "#.##") + " points | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if ha_sl_hit
+        alert("HA STOP LOSS: SL hit with loss -" + str.tostring(math.abs(ha_trade_points_sl), "#.##") + " points | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if ha_315_exit
+        result_msg = ha_trade_points_tp > 0 ? "profit" : "loss"
+        alert("HA 3:15 PM AUTO EXIT: " + str.tostring(math.abs(ha_trade_points_tp), "#.##") + " points " + result_msg + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    // Early Exit Warning Alerts
+    if ha_early_exit_green_warning and not ha_early_exit_green_warning[1]
+        alert("HA EARLY EXIT WARNING: BUY position approaching last green star - prepare for exit | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if ha_early_exit_red_warning and not ha_early_exit_red_warning[1]
+        alert("HA EARLY EXIT WARNING: SELL position approaching last red star - prepare for exit | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
+// Enhanced Overlap Filter Alerts (updated for 4 strategies)
 if overlap_detected
-    alert("SAME BAR OVERLAP: Multiple strategies signaled, priority given to BB>TBH-TRAIL>Breakout | Signals: " + str.tostring(signals_count) + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    alert("SAME BAR OVERLAP: Multiple strategies signaled, priority given to BB>HA>TBH-TRAIL>Breakout | Signals: " + str.tostring(signals_count) + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
 if active_trade_blocks
-    current_active = any_strategy_active ? (bb_in_trade ? "BB " : "") + (breakout_in_trade ? "BREAKOUT " : "") + (tbh_in_trade ? "TBH-TRAIL " : "") : "NONE"
+    current_active = any_strategy_active ? (bb_in_trade ? "BB " : "") + (breakout_in_trade ? "BREAKOUT " : "") + (tbh_in_trade ? "TBH-TRAIL " : "") + (ha_in_trade ? "HA " : "") : "NONE"
     alert("ACTIVE TRADE BLOCKS NEW SIGNAL: Current active: " + current_active + "| Blocked signals: " + str.tostring(signals_count) + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
 // Entry Blocking Alert
-if isEntryBlocked() and (bb_has_signal or breakout_has_signal or tbh_has_signal)
+if isEntryBlocked() and (bb_has_signal or breakout_has_signal or tbh_has_signal or ha_has_signal)
     alert("ENTRY BLOCKED: No new entries allowed after 3:15 PM | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
 // Bias Confluence Alerts
@@ -1887,7 +2102,7 @@ if candle_color_blocks_sell
     prev_candle_color = close[1] > open[1] ? "GREEN" : close[1] < open[1] ? "RED" : "DOJI"
     alert("GLOBAL CANDLE COLOR BLOCKS SELL SIGNAL: Previous candle is " + prev_candle_color + " but RED required for SELL signals | Global candle color confluence is enabled | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
-// Alert Conditions for all 3 strategies
+// Alert Conditions for all 4 strategies
 alertcondition(alert_above_upper and enable_bb_strategy, 'BB Alert Above Upper Band', 'BB Alert Candle Above Upper Band')
 alertcondition(alert_below_lower and enable_bb_strategy, 'BB Alert Below Lower Band', 'BB Alert Candle Below Lower Band')
 alertcondition(bb_sell_entry, 'BB Sell Entry Signal', 'BB Reversal SELL Entry')
@@ -1906,12 +2121,23 @@ alertcondition(tbh_tp_hit, 'TBH-TRAIL Take Profit', 'TBH-TRAIL Take Profit Hit')
 alertcondition(tbh_sl_hit, 'TBH-TRAIL Stop Loss', 'TBH-TRAIL Stop Loss Hit')
 alertcondition(tbh_in_trade and tbh_supertrend_activated and not tbh_supertrend_activated[1], 'TBH Supertrend Activation', 'TBH Supertrend Takes Over Trailing')
 
+alertcondition(ha_buy_entry, 'HA Buy Entry Signal', 'HA Green Star Buy Signal')
+alertcondition(ha_sell_entry, 'HA Sell Entry Signal', 'HA Red Star Sell Signal')
+alertcondition(ha_tp_hit, 'HA Take Profit Hit', 'HA Take Profit Hit')
+alertcondition(ha_sl_hit, 'HA Stop Loss Hit', 'HA Stop Loss Hit')
+alertcondition(ha_green_star, 'HA Green Star', 'HA Trend Green Star Detected')
+alertcondition(ha_red_star, 'HA Red Star', 'HA Trend Red Star Detected')
+alertcondition(ha_last_green_star_signal, 'HA Last Green Star', 'HA Last Green Star Exit Signal')
+alertcondition(ha_last_red_star_signal, 'HA Last Red Star', 'HA Last Red Star Exit Signal')
+alertcondition(ha_early_exit_green_warning, 'HA Early Exit Green Warning', 'HA Early Exit Warning for Green Trend')
+alertcondition(ha_early_exit_red_warning, 'HA Early Exit Red Warning', 'HA Early Exit Warning for Red Trend')
+
 alertcondition(tbh_buy_supertrend and enable_tbh_strategy, 'TBH Supertrend Buy Signal', 'TBH Supertrend Crossover Buy Signal')
 alertcondition(tbh_sell_supertrend and enable_tbh_strategy, 'TBH Supertrend Sell Signal', 'TBH Supertrend Crossunder Sell Signal')
 
 alertcondition(overlap_detected, 'Same Bar Overlap Filter', 'Multiple Strategy Signals Same Bar')
 alertcondition(active_trade_blocks, 'Active Trade Blocks Signal', 'New Signal Blocked by Active Trade')
-alertcondition(isEntryBlocked() and (bb_has_signal or breakout_has_signal or tbh_has_signal), 'Entry Blocked After 3:15 PM', 'New Entry Attempted After 3:15 PM')
+alertcondition(isEntryBlocked() and (bb_has_signal or breakout_has_signal or tbh_has_signal or ha_has_signal), 'Entry Blocked After 3:15 PM', 'New Entry Attempted After 3:15 PM')
 
 // Bias Confluence Alert Conditions
 alertcondition(bias_blocks_buy, 'Bias Blocks Buy Signal', 'Buy signal blocked due to unfavorable bias')
@@ -1945,10 +2171,12 @@ bgcolor(candle_color_blocks_sell ? color.new(color.yellow, 85) : na, title="Glob
 bgcolor(tbh_direction != tbh_direction[1] and enable_tbh_strategy and show_tbh_supertrend ? color.new(color.blue, 95) : na, title="Supertrend Direction Change")
 bgcolor(tbh_in_trade and tbh_supertrend_activated and not tbh_supertrend_activated[1] ? color.new(color.lime, 85) : na, title="TBH Supertrend Takes Over")
 
-// Color candles based on active trades - Updated with 3 strategies
+// Color candles based on active trades - Updated with 4 strategies
 barcolor(bb_in_trade and enable_bb_strategy and bb_trade_type == "BUY" ? color.new(color.green, 70) : 
          bb_in_trade and enable_bb_strategy and bb_trade_type == "SELL" ? color.new(color.red, 70) : 
          breakout_in_trade and enable_breakout_strategy and breakout_trade_type == "BUY" ? color.new(color.blue, 70) :
          breakout_in_trade and enable_breakout_strategy and breakout_trade_type == "SELL" ? color.new(color.orange, 70) :
          tbh_in_trade and enable_tbh_strategy and tbh_trade_type == "BUY" ? color.new(color.aqua, 70) :
-         tbh_in_trade and enable_tbh_strategy and tbh_trade_type == "SELL" ? color.new(color.fuchsia, 70) : na)
+         tbh_in_trade and enable_tbh_strategy and tbh_trade_type == "SELL" ? color.new(color.fuchsia, 70) :
+         ha_in_trade and enable_heikin_ashi_strategy and ha_trade_type == "BUY" ? color.new(color.lime, 70) :
+         ha_in_trade and enable_heikin_ashi_strategy and ha_trade_type == "SELL" ? color.new(color.maroon, 70) : na)
