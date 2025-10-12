@@ -44,14 +44,9 @@ enable_swing_strategy = input.bool(true, title="✅ Enable Swing (Heikin Ashi) S
 enable_tbh_bias_confluence = input.bool(true, title="✅ Enable TBH Bias Confluence", tooltip="Requires BULL bias for TBH BUY signals and BEAR bias for TBH SELL signals", group="TBH Bias Settings")
 enable_tbh_previous_bias_check = input.bool(false, title="✅ Enable TBH Previous Candle Bias Check", tooltip="Requires both current AND previous candle to have same bias for TBH signals", group="TBH Bias Settings")
 
-
-
-// BIAS CONFLUENCE TOGGLE
-enable_bias_confluence = input.bool(true, title="✅ Enable Nifty Bias Confluence", tooltip="Requires BULL bias for BUY signals and BEAR bias for SELL signals", group="Strategy Toggles")
-
-// PREVIOUS CANDLE BIAS CHECK TOGGLE
-enable_previous_bias_check = input.bool(false, title="✅ Enable Previous Candle Bias Check", tooltip="Requires both current AND previous candle to have same bias for signals", group="Strategy Toggles")
-
+// Swing Bias Confluence Settings
+enable_swing_bias_confluence = input.bool(true, title="✅ Enable Swing Bias Confluence", tooltip="Requires BULL bias for Swing BUY signals and BEAR bias for Swing SELL signals", group="Swing Bias Settings")
+enable_swing_previous_bias_check = input.bool(false, title="✅ Enable Swing Previous Candle Bias Check", tooltip="Requires both current AND previous candle to have same bias for Swing signals", group="Swing Bias Settings")
 
 // ENHANCED OVERLAP FILTER
 enable_overlap_filter = input.bool(true, title="✅ Enable Signal Overlap Filter", tooltip="Prevents multiple strategy signals when any strategy has active trade", group="Strategy Toggles")
@@ -216,17 +211,17 @@ isTBHBiasAllowedForSell() =>
 
 // Swing Bias Confluence Functions
 isSwingBiasAllowedForBuy() =>
-    if not enable_bias_confluence
+    if not enable_swing_bias_confluence
         true
-    else if enable_previous_bias_check
+    else if enable_swing_previous_bias_check
         current_nifty_bias == "BULL" and previous_nifty_bias == "BULL"
     else
         current_nifty_bias == "BULL"
 
 isSwingBiasAllowedForSell() =>
-    if not enable_bias_confluence
+    if not enable_swing_bias_confluence
         true
-    else if enable_previous_bias_check
+    else if enable_swing_previous_bias_check
         current_nifty_bias == "BEAR" and previous_nifty_bias == "BEAR"
     else
         current_nifty_bias == "BEAR"
@@ -787,8 +782,9 @@ swing_hat_sell_signal = swing_sell_signal_condition and swing_entry_allowed
 swing_signal_this_bar := false
 
 // Apply bias confluence for swing strategy (separate from other strategies)
-swing_bias_allowed_buy = isBiasAllowedForBuy()
-swing_bias_allowed_sell = isBiasAllowedForSell()
+// Apply bias confluence for swing strategy (separate from other strategies)
+swing_bias_allowed_buy = isSwingBiasAllowedForBuy()
+swing_bias_allowed_sell = isSwingBiasAllowedForSell()
 
 // Check if swing signals should be blocked by overlap filter
 swing_overlap_blocked = enable_overlap_filter and (tbh_in_trade)
