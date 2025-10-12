@@ -369,7 +369,7 @@ show_bb_tp_sl_labels = input.bool(true, title="Show BB TP/SL Hit Labels", group=
 // BREAKOUT STRATEGY INPUTS
 // ═══════════════════════════════════════════════════════════════════════════════════
 
-prd = input.int(7, title="Pivot Period", minval=2, group="Breakout Strategy")
+prd = input.int(7, title="Pivot Period", minval=1, group="Breakout Strategy")
 bo_len = input.int(200, title="Max Breakout Length", minval=0, maxval=3000, group="Breakout Strategy")
 cwidthu = input.float(6.0, title="Threshold Rate %", minval=1.0, maxval=100.0, group="Breakout Strategy") / 100
 mintest = input.int(2, title="Minimum Number of Tests", minval=1, group="Breakout Strategy")
@@ -378,7 +378,7 @@ min_points_below_zone = input.float(2.5, title="Min Points Below Zone for SELL",
 
 Atr = input.int(defval=5, title='ATR Period', minval=1, maxval=500, group="Breakout Strategy")
 Hhv = input.int(defval=10, title='HHV Period', minval=1, maxval=500, group="Breakout Strategy")
-Mult = input.float(defval=2.5, title='ATR Multiplier', minval=0.1, group="Breakout Strategy")
+Mult = input.float(defval=2.5, step=0.1, title='ATR Multiplier', minval=0.1, group="Breakout Strategy")
 
 // STOP LOSS SETTINGS
 breakout_sl_type = input.string("Entry Candle Low", title="Stop Loss Type", options=["Fixed Points", "ATR Trailing", "Entry Candle Low"], group="Breakout Strategy")
@@ -782,15 +782,15 @@ var int bb_alert_bar_index = na
 
 // Update alert candle levels
 if alert_above_upper and enable_bb_strategy and barstate.isconfirmed
-    bb_alert_candle_high := high
-    bb_alert_candle_low := low
+    bb_alert_candle_high := normal_high
+    bb_alert_candle_low := normal_low
     bb_waiting_for_entry := true
     bb_alert_is_above_upper := true
     bb_alert_bar_index := bar_index
 
 if alert_below_lower and enable_bb_strategy and barstate.isconfirmed
-    bb_alert_candle_high := high
-    bb_alert_candle_low := low
+    bb_alert_candle_high := normal_high
+    bb_alert_candle_low := normal_low
     bb_waiting_for_entry := true
     bb_alert_is_above_upper := false
     bb_alert_bar_index := bar_index
@@ -910,7 +910,7 @@ if array.size(phval) >= mintest and close > open and enable_breakout_strategy an
                 points_above_zone = close - bomax
                 if points_above_zone >= min_points_above_zone
                     bullish_breakout_base := true
-                    breakout_entry_candle_low := low
+                    breakout_entry_candle_low := normal_low
 
 bearish_breakdown_base = false
 var float breakout_entry_candle_high = na
@@ -935,7 +935,7 @@ if array.size(plval) >= mintest and close < open and enable_breakout_strategy an
                 points_below_zone = bomin - close
                 if points_below_zone >= min_points_below_zone
                     bearish_breakdown_base := true
-                    breakout_entry_candle_high := high
+                    breakout_entry_candle_high := normal_high
 
 // Breakout Trade Management Variables
 var bool breakout_in_trade = false
@@ -1456,8 +1456,8 @@ if tbh_buy_condition and not tbh_in_trade and barstate.isconfirmed
     tbh_trade_type := "BUY"
     tbh_entry_price := normal_close
     tbh_entry_bar_index := bar_index
-    tbh_entry_candle_low := low
-    tbh_entry_candle_high := high
+    tbh_entry_candle_low := normal_low
+    tbh_entry_candle_high := normal_high
     tbh_supertrend_activated := false
     tbh_using_fixed_tp := (tbh_tp_mode == "Fixed TP")
     
@@ -1481,8 +1481,8 @@ if tbh_sell_condition and not tbh_in_trade and barstate.isconfirmed
     tbh_trade_type := "SELL"
     tbh_entry_price := normal_close
     tbh_entry_bar_index := bar_index
-    tbh_entry_candle_low := low
-    tbh_entry_candle_high := high
+    tbh_entry_candle_low := normal_low
+    tbh_entry_candle_high := normal_high
     tbh_supertrend_activated := false
     tbh_using_fixed_tp := (tbh_tp_mode == "Fixed TP")
     
