@@ -1613,31 +1613,7 @@ if swing_enable_atr_trail_exit and swing_in_trade and barstate.isconfirmed
 
 
 
-// SWING STAR-BASED EXIT LOGIC
-if not swing_enable_atr_trail_exit and swing_use_star_based_exit and swing_in_trade and barstate.isconfirmed
-    swing_exit_stars = swing_exit_on_second_star ? 2 : 1
-    if swing_trade_type == "BUY" and swing_star_count_since_entry >= swing_exit_stars and swing_red_star
-        swing_exit_price := normal_close
-        if swing_exit_price > swing_entry_price
-            swing_trade_points_tp := swing_exit_price - swing_entry_price
-            swing_tp_hit_alert := true
-        else
-            swing_trade_points_sl := swing_entry_price - swing_exit_price
-            swing_sl_hit_alert := true
-        swing_star_exit_alert := true
-        swing_in_trade := false
-        swing_trade_type := ""
-    if swing_trade_type == "SELL" and swing_star_count_since_entry >= swing_exit_stars and swing_green_star
-        swing_exit_price := normal_close
-        if swing_exit_price < swing_entry_price
-            swing_trade_points_tp := swing_entry_price - swing_exit_price
-            swing_tp_hit_alert := true
-        else
-            swing_trade_points_sl := swing_exit_price - swing_entry_price
-            swing_sl_hit_alert := true
-        swing_star_exit_alert := true
-        swing_in_trade := false
-        swing_trade_type := ""
+
 
 // SWING FIXED SL/TP EXIT LOGIC
 if not swing_enable_atr_trail_exit and swing_in_trade and not swing_use_star_based_exit and barstate.isconfirmed
@@ -2350,12 +2326,12 @@ alertcondition(tbh_sl_hit, 'TBH-TRAIL Stop Loss', 'TBH-TRAIL Stop Loss Hit')
 if swing_enable_alerts and enable_swing_strategy
     if swing_buy_entry
         exit_info = swing_use_star_based_exit ? " | Exit Mode: Star-based (exit on red star)" : " | Exit Mode: Fixed SL/TP"
-        bias_info = swing_enable_bias_confluence ? " | Swing Bias: " + swing_current_nifty_bias + " (" + getSwingBiasSpreadInfo() + ")" : " | Swing Bias: DISABLED"
+        bias_info = enable_bias_confluence ? " | Swing Bias: " + current_nifty_bias + " (" + getBiasSpreadInfo() + ")" : " | Swing Bias: DISABLED"
         alert("SWING BUY SIGNAL: Entry at " + str.tostring(close, "#.##") + exit_info + bias_info + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
     
     if swing_sell_entry
         exit_info = swing_use_star_based_exit ? " | Exit Mode: Star-based (exit on green star)" : " | Exit Mode: Fixed SL/TP"
-        bias_info = swing_enable_bias_confluence ? " | Swing Bias: " + swing_current_nifty_bias + " (" + getSwingBiasSpreadInfo() + ")" : " | Swing Bias: DISABLED"
+        bias_info = enable_bias_confluence ? " | Swing Bias: " + current_nifty_bias + " (" + getBiasSpreadInfo() + ")" : " | Swing Bias: DISABLED"
         alert("SWING SELL SIGNAL: Entry at " + str.tostring(close, "#.##") + exit_info + bias_info + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
     if swing_tp_hit_alert
         exit_type = swing_use_star_based_exit ? "STAR-BASED" : "FIXED"
