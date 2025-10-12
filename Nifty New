@@ -69,18 +69,6 @@ swing_block_entries_after_exit = input.bool(true, title="Block Swing Entries Aft
 
 swing_start_time = input.string("09:15", title="Swing Strategy Start Time", options=["09:15", "09:30", "09:45", "10:00", "09:20", "10:30", "10:45", "11:00"], group="Strategy Start Times")
 
-// ═══════════════════════════════════════════════════════════════════════════════════
-// NIFTY BIAS CONFLUENCE CALCULATION - TOP 20 STOCKS
-// ═══════════════════════════════════════════════════════════════════════════════════
-
-// Bias calculation parameters
-bias_update_frequency = input.int(5, "Bias Update Frequency (minutes)", minval=1, maxval=15, tooltip="Time between bias analysis sessions", group="Bias Confluence")
-bias_change_threshold = input.float(0.05, "Bias Threshold %", minval=0.01, step=0.01, tooltip="Minimum % change to classify as gainer/loser", group="Bias Confluence")
-
-// Configurable bias thresholds
-bias_bull_threshold = input.float(8.0, "BULL Bias Threshold", minval=1.0, maxval=50.0, step=0.5, tooltip="Spread above this value = BULL bias", group="Bias Confluence")
-bias_bear_threshold = input.float(-8.0, "BEAR Bias Threshold", maxval=-1.0, minval=-50.0, step=0.5, tooltip="Spread below this value = BEAR bias", group="Bias Confluence")
-
 
 
 // ═════════════════════════════════════════════════════════════════
@@ -296,15 +284,15 @@ isSwingBiasAllowedForSell() =>
         swing_current_nifty_bias == "BEAR"
 
 
-getBiasSpreadInfo() => (bias_spread > 0 ? "+" + str.tostring(bias_spread, "#.##") : str.tostring(bias_spread, "#.##")) + " (" + str.tostring(bias_gainers_count) + "G/" + str.tostring(bias_losers_count) + "L/" + str.tostring(bias_unchanged_count) + "N)"
+// TBH Bias Info Functions
+getTBHBiasSpreadInfo() => (tbh_bias_spread > 0 ? "+" + str.tostring(tbh_bias_spread, "#.##") : str.tostring(tbh_bias_spread, "#.##"))
 
+getTBHBiasThresholdInfo() => "Bull>" + str.tostring(tbh_bias_bull_threshold, "#.#") + " | Bear<" + str.tostring(tbh_bias_bear_threshold, "#.#")
 
+// Swing Bias Info Functions
+getSwingBiasSpreadInfo() => (swing_bias_spread > 0 ? "+" + str.tostring(swing_bias_spread, "#.##") : str.tostring(swing_bias_spread, "#.##"))
 
-getBiasThresholdInfo() => "Bull>" + str.tostring(bias_bull_threshold, "#.#") + " | Bear<" + str.tostring(bias_bear_threshold, "#.#")
-
-getBiasCoverageInfo() => "Top16: " + str.tostring(math.round(bias_gainers_weight + bias_losers_weight, 1)) + "% coverage"
-
-
+getSwingBiasThresholdInfo() => "Bull>" + str.tostring(swing_bias_bull_threshold, "#.#") + " | Bear<" + str.tostring(swing_bias_bear_threshold, "#.#")
 
 
 
