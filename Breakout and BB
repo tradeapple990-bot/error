@@ -482,10 +482,10 @@ isFirstCandleBefore926() =>
 isSlOrTpHitInCurrentCandle(entry_price, stop_loss, take_profit, is_buy_trade) =>
     if is_buy_trade
         // For BUY: SL hit if low <= stop_loss, TP hit if high >= take_profit
-        (not na(stop_loss) and low <= stop_loss) or (not na(take_profit) and high >= take_profit)
+        (not na(stop_loss) and normal_low <= stop_loss) or (not na(take_profit) and normal_high >= take_profit)
     else
         // For SELL: SL hit if high >= stop_loss, TP hit if low <= take_profit
-        (not na(stop_loss) and high >= stop_loss) or (not na(take_profit) and low <= take_profit)
+        (not na(stop_loss) and normal_high >= stop_loss) or (not na(take_profit) and normal_low <= take_profit)
 
 
 
