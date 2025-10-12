@@ -40,6 +40,12 @@ enable_tbh_strategy = input.bool(true, title="✅ Enable Top Bottom Hunter Strat
 enable_swing_strategy = input.bool(true, title="✅ Enable Swing (Heikin Ashi) Strategy", group="Strategy Toggles")
 
 
+// TBH Bias Confluence Settings
+enable_tbh_bias_confluence = input.bool(true, title="✅ Enable TBH Bias Confluence", tooltip="Requires BULL bias for TBH BUY signals and BEAR bias for TBH SELL signals", group="TBH Bias Settings")
+enable_tbh_previous_bias_check = input.bool(false, title="✅ Enable TBH Previous Candle Bias Check", tooltip="Requires both current AND previous candle to have same bias for TBH signals", group="TBH Bias Settings")
+
+
+
 // BIAS CONFLUENCE TOGGLE
 enable_bias_confluence = input.bool(true, title="✅ Enable Nifty Bias Confluence", tooltip="Requires BULL bias for BUY signals and BEAR bias for SELL signals", group="Strategy Toggles")
 
@@ -187,8 +193,29 @@ if barstate.isconfirmed
     previous_nifty_bias := current_nifty_bias[1]
 
 
-// Enhanced bias confluence functions with previous candle check
-isBiasAllowedForBuy() =>
+// ═════════════════════════════════════════════════════════════════
+// SEPARATE BIAS CONFLUENCE FUNCTIONS FOR TBH AND SWING
+// ═════════════════════════════════════════════════════════════════
+
+// TBH Bias Confluence Functions
+isTBHBiasAllowedForBuy() =>
+    if not enable_tbh_bias_confluence
+        true
+    else if enable_tbh_previous_bias_check
+        current_nifty_bias == "BULL" and previous_nifty_bias == "BULL"
+    else
+        current_nifty_bias == "BULL"
+
+isTBHBiasAllowedForSell() =>
+    if not enable_tbh_bias_confluence
+        true
+    else if enable_tbh_previous_bias_check
+        current_nifty_bias == "BEAR" and previous_nifty_bias == "BEAR"
+    else
+        current_nifty_bias == "BEAR"
+
+// Swing Bias Confluence Functions
+isSwingBiasAllowedForBuy() =>
     if not enable_bias_confluence
         true
     else if enable_previous_bias_check
@@ -196,7 +223,7 @@ isBiasAllowedForBuy() =>
     else
         current_nifty_bias == "BULL"
 
-isBiasAllowedForSell() =>
+isSwingBiasAllowedForSell() =>
     if not enable_bias_confluence
         true
     else if enable_previous_bias_check
@@ -205,13 +232,16 @@ isBiasAllowedForSell() =>
         current_nifty_bias == "BEAR"
 
 
-getBiasSpreadInfo() => (bias_spread > 0 ? "+" + str.tostring(bias_spread, "#.##") : str.tostring(bias_spread, "#.##")) + " (" + str.tostring(bias_gainers_count) + "G/" + str.tostring(bias_losers_count) + "L/" + str.tostring(bias_unchanged_count) + "U)"
+getBiasSpreadInfo() => (bias_spread > 0 ? "+" + str.tostring(bias_spread, "#.##") : str.tostring(bias_spread, "#.##")) + " (" + str.tostring(bias_gainers_count) + "G/" + str.tostring(bias_losers_count) + "L/" + str.tostring(bias_unchanged_count) + "N)"
 
 
 
 getBiasThresholdInfo() => "Bull>" + str.tostring(bias_bull_threshold, "#.#") + " | Bear<" + str.tostring(bias_bear_threshold, "#.#")
 
 getBiasCoverageInfo() => "Top16: " + str.tostring(math.round(bias_gainers_weight + bias_losers_weight, 1)) + "% coverage"
+
+
+
 
 
 
@@ -856,11 +886,11 @@ if swing_in_trade
 // TBH Entry Conditions - WITH ALL FILTERS (TIME, CANDLE COLOR, ENHANCED ENTRY, BIAS)
 tbh_buy_condition_base  = ta.crossover(tbh_rsi_value, tbh_rsi_oversold) and close > tbh_fib_level_1 and not tbh_in_trade and 
                          enable_tbh_strategy and not isEntryBlocked() and 
-                         isTBHCandleColorValid(true) and isTBHEnhancedEntryValid(true) and isBiasAllowedForBuy()
+                         isTBHCandleColorValid(true) and isTBHEnhancedEntryValid(true) and isTBHBiasAllowedForBuy()
 
 tbh_sell_condition_base = ta.crossunder(tbh_rsi_value, tbh_rsi_overbought) and close < tbh_fib_level_0 and not tbh_in_trade and 
                          enable_tbh_strategy and not isEntryBlocked() and 
-                         isTBHCandleColorValid(false) and isTBHEnhancedEntryValid(false) and isBiasAllowedForSell()
+                         isTBHCandleColorValid(false) and isTBHEnhancedEntryValid(false) and isTBHBiasAllowedForSell()
 
 // TBH Trade Exit Flags
 var bool tbh_tp_hit = false
