@@ -86,6 +86,123 @@ bias_bull_threshold = input.float(8.0, "BULL Bias Threshold", minval=1.0, maxval
 bias_bear_threshold = input.float(-8.0, "BEAR Bias Threshold", maxval=-1.0, minval=-50.0, step=0.5, tooltip="Spread below this value = BEAR bias", group="Bias Confluence")
 
 
+// Top 16 Nifty stocks with OFFICIAL WEIGHTAGES (Total: ~66% coverage)
+bias_top16_symbols = array.from("NSE:HDFCBANK", "NSE:ICICIBANK", "NSE:RELIANCE", "NSE:INFY", "NSE:BHARTIARTL", "NSE:LT", "NSE:ITC", "NSE:TCS", "NSE:SBIN", "NSE:AXISBANK", "NSE:KOTAKBANK", "NSE:M&M", "NSE:HCLTECH", "NSE:BAJFINANCE", "NSE:MARUTI", "NSE:ASIANPAINT")
+bias_top16_weights = array.from(13.11, 9.00, 8.31, 4.78, 4.65, 3.82, 3.45, 2.85, 2.79, 2.70, 2.60, 2.55, 2.14, 2.13, 2.11, 1.97)
+
+// Request security data for top 20 stocks (40 calls total - within Pine Script limit)
+// Stocks 1-10
+bias_stock1_current = request.security("NSE:HDFCBANK", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock1_ref = request.security("NSE:HDFCBANK", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock2_current = request.security("NSE:ICICIBANK", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock2_ref = request.security("NSE:ICICIBANK", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock3_current = request.security("NSE:RELIANCE", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock3_ref = request.security("NSE:RELIANCE", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock4_current = request.security("NSE:INFY", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock4_ref = request.security("NSE:INFY", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock5_current = request.security("NSE:BHARTIARTL", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock5_ref = request.security("NSE:BHARTIARTL", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock6_current = request.security("NSE:LT", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock6_ref = request.security("NSE:LT", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock7_current = request.security("NSE:ITC", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock7_ref = request.security("NSE:ITC", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock8_current = request.security("NSE:TCS", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock8_ref = request.security("NSE:TCS", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock9_current = request.security("NSE:SBIN", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock9_ref = request.security("NSE:SBIN", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock10_current = request.security("NSE:AXISBANK", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock10_ref = request.security("NSE:AXISBANK", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+
+// Stocks 11-20
+bias_stock11_current = request.security("NSE:KOTAKBANK", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock11_ref = request.security("NSE:KOTAKBANK", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock12_current = request.security("NSE:HCLTECH", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock12_ref = request.security("NSE:HCLTECH", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock13_current = request.security("NSE:BAJFINANCE", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock13_ref = request.security("NSE:BAJFINANCE", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock14_current = request.security("NSE:MARUTI", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock14_ref = request.security("NSE:MARUTI", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock15_current = request.security("NSE:ASIANPAINT", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock15_ref = request.security("NSE:ASIANPAINT", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock16_current = request.security("NSE:NESTLEIND", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock16_ref = request.security("NSE:NESTLEIND", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock17_current = request.security("NSE:ULTRACEMCO", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock17_ref = request.security("NSE:ULTRACEMCO", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock18_current = request.security("NSE:TITAN", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock18_ref = request.security("NSE:TITAN", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock19_current = request.security("NSE:WIPRO", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock19_ref = request.security("NSE:WIPRO", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+bias_stock20_current = request.security("NSE:SUNPHARMA", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
+bias_stock20_ref = request.security("NSE:SUNPHARMA", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
+
+
+// Arrays for bias calculation - TOP 16 STOCKS
+bias_current_prices = array.from(bias_stock1_current, bias_stock2_current, bias_stock3_current, bias_stock4_current, bias_stock5_current, bias_stock6_current, bias_stock7_current, bias_stock8_current, bias_stock9_current, bias_stock10_current, bias_stock11_current, bias_stock12_current, bias_stock13_current, bias_stock14_current, bias_stock15_current, bias_stock16_current)
+bias_ref_prices = array.from(bias_stock1_ref, bias_stock2_ref, bias_stock3_ref, bias_stock4_ref, bias_stock5_ref, bias_stock6_ref, bias_stock7_ref, bias_stock8_ref, bias_stock9_ref, bias_stock10_ref, bias_stock11_ref, bias_stock12_ref, bias_stock13_ref, bias_stock14_ref, bias_stock15_ref, bias_stock16_ref)
+
+// Calculate bias with top 20 stocks
+var float bias_gainers_weight = 0.0
+var float bias_losers_weight = 0.0
+var float bias_spread = 0.0
+var string current_nifty_bias = "SIDEWAYS"
+var int bias_gainers_count = 0
+var int bias_losers_count = 0
+var int bias_unchanged_count = 0
+
+// Update bias calculation with configurable thresholds
+if barstate.isconfirmed
+    temp_gainers_weight = 0.0
+    temp_losers_weight = 0.0
+    temp_gainers_count = 0
+    temp_losers_count = 0
+    temp_unchanged_count = 0
+    
+    for i = 0 to 15  // Top 16 stocks
+        weight = array.get(bias_top16_weights, i)
+        stock_current = array.get(bias_current_prices, i)
+        stock_ref = array.get(bias_ref_prices, i)
+        
+        change_pct = stock_ref != 0 and not na(stock_ref) and not na(stock_current) ? 
+                     ((stock_current - stock_ref) / stock_ref) * 100 : 0.0
+        
+        if change_pct > bias_change_threshold
+            temp_gainers_weight += weight
+            temp_gainers_count += 1
+        else if change_pct < -bias_change_threshold
+            temp_losers_weight += weight
+            temp_losers_count += 1
+        else
+            temp_unchanged_count += 1
+    
+    bias_gainers_weight := temp_gainers_weight
+    bias_losers_weight := temp_losers_weight
+    bias_gainers_count := temp_gainers_count
+    bias_losers_count := temp_losers_count
+    bias_unchanged_count := temp_unchanged_count
+    
+    bias_spread := bias_gainers_weight - bias_losers_weight
+    current_nifty_bias := bias_spread > bias_bull_threshold ? "BULL" : bias_spread < bias_bear_threshold ? "BEAR" : "SIDEWAYS"
+
+// Bias confluence functions
+isBiasAllowedForBuy() =>
+    if not enable_bias_confluence
+        true
+    else
+        current_nifty_bias == "BULL"
+
+isBiasAllowedForSell() =>
+    if not enable_bias_confluence
+        true
+    else
+        current_nifty_bias == "BEAR"
+
+
+getBiasSpreadInfo() => (bias_spread > 0 ? "+" + str.tostring(bias_spread, "#.##") : str.tostring(bias_spread, "#.##")) + " (" + str.tostring(bias_gainers_count) + "G/" + str.tostring(bias_losers_count) + "L/" + str.tostring(bias_unchanged_count) + "N)"
+
+getBiasThresholdInfo() => "Bull>" + str.tostring(bias_bull_threshold, "#.#") + " | Bear<" + str.tostring(bias_bear_threshold, "#.#")
+
+getBiasCoverageInfo() => "Top16: " + str.tostring(math.round(bias_gainers_weight + bias_losers_weight, 1)) + "% coverage"
+
 
 
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -631,7 +748,7 @@ var float breakout_entry_candle_low = na
 
 hgst_value = ta.highest(prd)[1]
 
-if array.size(phval) >= mintest and close > open and enable_breakout_strategy and not isEntryBlocked() and isBiasAllowedForBuy() 
+if array.size(phval) >= mintest and close > open and enable_breakout_strategy and not isEntryBlocked() and isBiasAllowedForBuy()  
     if close > hgst_value
         bomax = array.get(phval, 0)
         xx = 0
@@ -902,8 +1019,9 @@ swing_signal_this_bar := false
 swing_bias_allowed_buy = isBiasAllowedForBuy()
 swing_bias_allowed_sell = isBiasAllowedForSell()
 
+
 // Check if swing signals should be blocked by overlap filter
-swing_overlap_blocked = enable_overlap_filter and any_strategy_active
+swing_overlap_blocked = enable_overlap_filter and (tbh_in_trade)
 
 // Final swing signals with all filters applied
 swing_final_buy_signal = swing_hat_buy_signal and swing_bias_allowed_buy and not swing_overlap_blocked and not isEntryBlocked()
@@ -914,13 +1032,14 @@ if swing_final_buy_signal or swing_final_sell_signal
     swing_signal_this_bar := true
 
 // Update any_strategy_active to include swing strategy
-any_strategy_active := bb_in_trade or breakout_in_trade or tbh_in_trade or swing_in_trade
+// Update any_strategy_active to include swing strategy
+any_strategy_active := tbh_in_trade or swing_in_trade
 
 // Swing strategy trade entries with overlap filter
 if swing_final_buy_signal and not swing_in_trade
     swing_in_trade := true
     swing_trade_type := "BUY"
-    swing_entry_price := close
+    swing_entry_price := normal_close
     swing_entry_bar := bar_index
     swing_star_count_since_entry := 0
     
@@ -929,8 +1048,8 @@ if swing_final_buy_signal and not swing_in_trade
         swing_stop_loss := na
         swing_take_profit := na
     else
-        swing_stop_loss := close - swing_fixed_sl_points
-        swing_take_profit := close + swing_fixed_tp_points
+        swing_stop_loss := swing_entry_price - swing_fixed_sl_points
+        swing_take_profit := swing_entry_price + swing_fixed_tp_points
     
     // Alert
     if swing_enable_alerts
@@ -939,7 +1058,7 @@ if swing_final_buy_signal and not swing_in_trade
 if swing_final_sell_signal and not swing_in_trade
     swing_in_trade := true
     swing_trade_type := "SELL"
-    swing_entry_price := close
+    swing_entry_price := normal_close
     swing_entry_bar := bar_index
     swing_star_count_since_entry := 0
     
@@ -948,17 +1067,18 @@ if swing_final_sell_signal and not swing_in_trade
         swing_stop_loss := na
         swing_take_profit := na
     else
-        swing_stop_loss := close + swing_fixed_sl_points
-        swing_take_profit := close - swing_fixed_tp_points
+        swing_stop_loss := swing_entry_price + swing_fixed_sl_points
+        swing_take_profit := swing_entry_price - swing_fixed_tp_points
     
     // Alert
     if swing_enable_alerts
         alert("Swing SELL Signal - Entry: " + str.tostring(close, "#.##"), alert.freq_once_per_bar)
 
 // Dual ATR trailing stop logic
-swing_atr = ta.atr(swing_atr_trail_period)
-swing_long_stop_raw = low - swing_atr_trail_mult * swing_atr
-swing_short_stop_raw = high + swing_atr_trail_mult * swing_atr
+// Dual ATR trailing stop logic
+swing_atr = request.security(base_ticker, timeframe.period, ta.atr(swing_atr_trail_period), lookahead=barmerge.lookahead_off)
+swing_long_stop_raw = normal_low - swing_atr_trail_mult * swing_atr  // Fixed: Use normal_low
+swing_short_stop_raw = normal_high + swing_atr_trail_mult * swing_atr  // Fixed: Use normal_high
 
 var float swing_lower_atr_trail = na
 var float swing_upper_atr_trail = na
