@@ -781,8 +781,7 @@ swing_hat_sell_signal = swing_sell_signal_condition and swing_entry_allowed
 // Reset swing signal flag each bar
 swing_signal_this_bar := false
 
-// Apply bias confluence for swing strategy (separate from other strategies)
-// Apply bias confluence for swing strategy (separate from other strategies)
+// Apply bias confluence for swing strategy (using Swing-specific functions)
 swing_bias_allowed_buy = isSwingBiasAllowedForBuy()
 swing_bias_allowed_sell = isSwingBiasAllowedForSell()
 
