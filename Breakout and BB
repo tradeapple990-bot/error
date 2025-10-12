@@ -1611,9 +1611,7 @@ if swing_enable_atr_trail_exit and swing_in_trade and barstate.isconfirmed
         swing_in_trade := false
         swing_trade_type := ""
 
-// When swing trade closes by SL or TP (not auto exit)
-if swing_in_trade and (swing_sl_hit_alert or swing_tp_hit_alert)
-    swing_last_exit_by_auto := false  // Reset flag since exit was by SL/TP, not auto exit
+
 
 // SWING STAR-BASED EXIT LOGIC
 if not swing_enable_atr_trail_exit and swing_use_star_based_exit and swing_in_trade and barstate.isconfirmed
@@ -1667,91 +1665,7 @@ if not swing_enable_atr_trail_exit and swing_in_trade and not swing_use_star_bas
             swing_trade_type := ""
 
 
-// SWING AUTO EXIT LOGIC WITH RE-ENTRY TRACKING - SEPARATE FROM MAIN AUTO EXIT
-if swing_in_trade and swing_enable_auto_exit and isAfterSwingAutoExitTime() and barstate.isconfirmed
-    // Track that this exit was by auto exit
-    swing_last_exit_by_auto := true
-    swing_last_exit_trade_type := swing_trade_type
-    swing_last_exit_day := dayofmonth(time)
-    swing_re_entry_done_today := false
-    
-    // Calculate points for tracking (existing logic)
-    swing_exit_price := normal_close
-    if swing_trade_type == "BUY"
-        if swing_exit_price > swing_entry_price
-            swing_trade_points_tp := swing_exit_price - swing_entry_price
-            swing_tp_hit_alert := true
-        else
-            swing_trade_points_sl := swing_entry_price - swing_exit_price
-            swing_sl_hit_alert := true
-    else if swing_trade_type == "SELL"
-        if swing_exit_price < swing_entry_price
-            swing_trade_points_tp := swing_entry_price - swing_exit_price
-            swing_tp_hit_alert := true
-        else
-            swing_trade_points_sl := swing_exit_price - swing_entry_price
-            swing_sl_hit_alert := true
-    
-    // Close the trade
-    swing_auto_exit_alert := true
-    swing_in_trade := false
-    swing_trade_type := ""
-    swing_entry_price := na
-    swing_stop_loss := na
-    swing_take_profit := na
-    swing_entry_bar_index := na
-    swing_star_count_since_entry := 0
 
-
-
-// SWING COLOR EXIT LOGIC
-if not swing_enable_atr_trail_exit and swing_in_trade and barstate.isconfirmed
-    // Exit for Buy (entered on lime): exit on any bar that is NOT lime
-    if enable_swing_strategy and not swing_in_trade and not isSwingEntryBlocked() and isSwingStartTimeValid()
-        swing_exit_price := normal_close
-        if swing_exit_price > swing_entry_price
-            swing_trade_points_tp := swing_exit_price - swing_entry_price
-            swing_tp_hit_alert := true
-        else
-            swing_trade_points_sl := swing_entry_price - swing_exit_price
-            swing_sl_hit_alert := true
-        swing_in_trade := false
-        swing_trade_type := ""
-
-    // Exit for Sell (entered on red): exit on any bar that is NOT red
-    if swing_trade_type == "SELL" and not swing_bar_is_red
-        swing_exit_price := normal_close
-        if swing_exit_price < swing_entry_price
-            swing_trade_points_tp := swing_entry_price - swing_exit_price
-            swing_tp_hit_alert := true
-        else
-            swing_trade_points_sl := swing_exit_price - swing_entry_price
-            swing_sl_hit_alert := true
-        swing_in_trade := false
-        swing_trade_type := ""
-
-// SWING PLOT CROSS EXIT
-if swing_exit_on_plot_cross and not swing_enable_atr_trail_exit and swing_in_trade and barstate.isconfirmed
-    if swing_trade_type == "BUY" and normal_close < swing_crossPlot
-        swing_exit_price := normal_close
-        if swing_exit_price > swing_entry_price
-            swing_trade_points_tp := swing_exit_price - swing_entry_price
-            swing_tp_hit_alert := true
-        else
-            swing_trade_points_sl := swing_entry_price - swing_exit_price
-            swing_sl_hit_alert := true
-        swing_in_trade := false
-        swing_trade_type := ""
-    if swing_trade_type == "SELL" and normal_close > swing_crossPlot
-        swing_exit_price := normal_close
-        if swing_exit_price < swing_entry_price
-            swing_trade_points_tp := swing_entry_price - swing_exit_price
-            swing_tp_hit_alert := true
-        else
-            swing_trade_points_sl := swing_exit_price - swing_entry_price
-            swing_sl_hit_alert := true
-        swing_in_trade := false
-        swing_trade_type := ""
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // CORRECTED PERFORMANCE TRACKING FOR BB, BREAKOUT & TBH
