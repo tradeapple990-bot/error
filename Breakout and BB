@@ -69,11 +69,7 @@ swing_start_time = input.string("09:15", title="Swing Strategy Start Time", opti
 
 
 
-// SWING AUTO EXIT RE-ENTRY TRACKING VARIABLES
-var bool swing_last_exit_by_auto = false
-var string swing_last_exit_trade_type = ""
-var bool swing_re_entry_done_today = false
-var int swing_last_exit_day = na
+
 
 
 
@@ -90,252 +86,7 @@ bias_bull_threshold = input.float(8.0, "BULL Bias Threshold", minval=1.0, maxval
 bias_bear_threshold = input.float(-8.0, "BEAR Bias Threshold", maxval=-1.0, minval=-50.0, step=0.5, tooltip="Spread below this value = BEAR bias", group="Bias Confluence")
 
 
-// SWING STRATEGY BIAS CONFLUENCE SETTINGS - SEPARATE FROM OTHER STRATEGIES
-swing_enable_bias_confluence = input.bool(false, title="✅ Enable Swing Bias Confluence", tooltip="Requires BULL bias for BUY signals and BEAR bias for SELL signals - SEPARATE from other strategies", group="Swing Bias Confluence")
 
-// Swing bias calculation parameters
-swing_bias_update_frequency = input.int(5, "Swing Bias Update Frequency (minutes)", minval=1, maxval=15, tooltip="Time between bias analysis sessions for Swing strategy", group="Swing Bias Confluence")
-swing_bias_change_threshold = input.float(0.05, "Swing Bias Threshold %", minval=0.01, step=0.01, tooltip="Minimum % change to classify as gainer/loser for Swing", group="Swing Bias Confluence")
-
-// Swing configurable bias thresholds
-swing_bias_bull_threshold = input.float(8.0, "Swing BULL Bias Threshold", minval=1.0, maxval=50.0, step=0.5, tooltip="Spread above this value = BULL bias for Swing", group="Swing Bias Confluence")
-swing_bias_bear_threshold = input.float(-8.0, "Swing BEAR Bias Threshold", maxval=-1.0, minval=-50.0, step=0.5, tooltip="Spread below this value = BEAR bias for Swing", group="Swing Bias Confluence")
-
-
-// Top 16 Nifty stocks with OFFICIAL WEIGHTAGES (Total: ~66% coverage)
-bias_top16_symbols = array.from("NSE:HDFCBANK", "NSE:ICICIBANK", "NSE:RELIANCE", "NSE:INFY", "NSE:BHARTIARTL", "NSE:LT", "NSE:ITC", "NSE:TCS", "NSE:SBIN", "NSE:AXISBANK", "NSE:KOTAKBANK", "NSE:M&M", "NSE:BAJFINANCE", "NSE:HINDUNILVR", "NSE:BAJAJFINSV", "NSE:ADANIENT")
-bias_top16_weights = array.from(13.11, 9.00, 8.31, 4.78, 4.65, 3.82, 3.45, 2.85, 2.79, 2.70, 2.60, 2.55, 2.14, 2.13, 2.11, 1.97)
-
-// Request security data for top 20 stocks (40 calls total - within Pine Script limit)
-// Stocks 1-10
-bias_stock1_current = request.security("NSE:HDFCBANK", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock1_ref = request.security("NSE:HDFCBANK", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock2_current = request.security("NSE:ICICIBANK", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock2_ref = request.security("NSE:ICICIBANK", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock3_current = request.security("NSE:RELIANCE", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock3_ref = request.security("NSE:RELIANCE", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock4_current = request.security("NSE:INFY", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock4_ref = request.security("NSE:INFY", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock5_current = request.security("NSE:BHARTIARTL", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock5_ref = request.security("NSE:BHARTIARTL", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock6_current = request.security("NSE:LT", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock6_ref = request.security("NSE:LT", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock7_current = request.security("NSE:ITC", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock7_ref = request.security("NSE:ITC", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock8_current = request.security("NSE:TCS", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock8_ref = request.security("NSE:TCS", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock9_current = request.security("NSE:SBIN", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock9_ref = request.security("NSE:SBIN", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock10_current = request.security("NSE:AXISBANK", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock10_ref = request.security("NSE:AXISBANK", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-
-// Stocks 11-20
-bias_stock11_current = request.security("NSE:KOTAKBANK", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock11_ref = request.security("NSE:KOTAKBANK", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock12_current = request.security("NSE:HCLTECH", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock12_ref = request.security("NSE:HCLTECH", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock13_current = request.security("NSE:BAJFINANCE", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock13_ref = request.security("NSE:BAJFINANCE", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock14_current = request.security("NSE:MARUTI", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock14_ref = request.security("NSE:MARUTI", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock15_current = request.security("NSE:ASIANPAINT", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock15_ref = request.security("NSE:ASIANPAINT", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock16_current = request.security("NSE:NESTLEIND", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock16_ref = request.security("NSE:NESTLEIND", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock17_current = request.security("NSE:ULTRACEMCO", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock17_ref = request.security("NSE:ULTRACEMCO", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock18_current = request.security("NSE:TITAN", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock18_ref = request.security("NSE:TITAN", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock19_current = request.security("NSE:WIPRO", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock19_ref = request.security("NSE:WIPRO", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-bias_stock20_current = request.security("NSE:SUNPHARMA", str.tostring(bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-bias_stock20_ref = request.security("NSE:SUNPHARMA", str.tostring(bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-
-
-// Arrays for bias calculation - TOP 16 STOCKS
-bias_current_prices = array.from(bias_stock1_current, bias_stock2_current, bias_stock3_current, bias_stock4_current, bias_stock5_current, bias_stock6_current, bias_stock7_current, bias_stock8_current, bias_stock9_current, bias_stock10_current, bias_stock11_current, bias_stock12_current, bias_stock13_current, bias_stock14_current, bias_stock15_current, bias_stock16_current)
-bias_ref_prices = array.from(bias_stock1_ref, bias_stock2_ref, bias_stock3_ref, bias_stock4_ref, bias_stock5_ref, bias_stock6_ref, bias_stock7_ref, bias_stock8_ref, bias_stock9_ref, bias_stock10_ref, bias_stock11_ref, bias_stock12_ref, bias_stock13_ref, bias_stock14_ref, bias_stock15_ref, bias_stock16_ref)
-
-// Calculate bias with top 20 stocks
-var float bias_gainers_weight = 0.0
-var float bias_losers_weight = 0.0
-var float bias_spread = 0.0
-var string current_nifty_bias = "SIDEWAYS"
-var int bias_gainers_count = 0
-var int bias_losers_count = 0
-var int bias_unchanged_count = 0
-
-// Update bias calculation with configurable thresholds
-if barstate.isconfirmed
-    temp_gainers_weight = 0.0
-    temp_losers_weight = 0.0
-    temp_gainers_count = 0
-    temp_losers_count = 0
-    temp_unchanged_count = 0
-    
-    for i = 0 to 15  // Top 16 stocks
-        weight = array.get(bias_top16_weights, i)
-        stock_current = array.get(bias_current_prices, i)
-        stock_ref = array.get(bias_ref_prices, i)
-        
-        change_pct = stock_ref != 0 and not na(stock_ref) and not na(stock_current) ? 
-                     ((stock_current - stock_ref) / stock_ref) * 100 : 0.0
-        
-        if change_pct > bias_change_threshold
-            temp_gainers_weight += weight
-            temp_gainers_count += 1
-        else if change_pct < -bias_change_threshold
-            temp_losers_weight += weight
-            temp_losers_count += 1
-        else
-            temp_unchanged_count += 1
-    
-    bias_gainers_weight := temp_gainers_weight
-    bias_losers_weight := temp_losers_weight
-    bias_gainers_count := temp_gainers_count
-    bias_losers_count := temp_losers_count
-    bias_unchanged_count := temp_unchanged_count
-    
-    bias_spread := bias_gainers_weight - bias_losers_weight
-    current_nifty_bias := bias_spread > bias_bull_threshold ? "BULL" : bias_spread < bias_bear_threshold ? "BEAR" : "SIDEWAYS"
-
-// Bias confluence functions
-isBiasAllowedForBuy() =>
-    if not enable_bias_confluence
-        true
-    else
-        current_nifty_bias == "BULL"
-
-isBiasAllowedForSell() =>
-    if not enable_bias_confluence
-        true
-    else
-        current_nifty_bias == "BEAR"
-
-
-getBiasSpreadInfo() => (bias_spread > 0 ? "+" + str.tostring(bias_spread, "#.##") : str.tostring(bias_spread, "#.##")) + " (" + str.tostring(bias_gainers_count) + "G/" + str.tostring(bias_losers_count) + "L/" + str.tostring(bias_unchanged_count) + "U)"
-
-
-
-getBiasThresholdInfo() => "Bull>" + str.tostring(bias_bull_threshold, "#.#") + " | Bear<" + str.tostring(bias_bear_threshold, "#.#")
-
-getBiasCoverageInfo() => "Top16: " + str.tostring(math.round(bias_gainers_weight + bias_losers_weight, 1)) + "% coverage"
-
-// ═════════════════════════════════════════════════════════════════
-// SWING STRATEGY SEPARATE BIAS CONFLUENCE CALCULATION
-// ═════════════════════════════════════════════════════════════════
-
-// Request security data for Swing bias (separate from main bias)
-// Stocks 1-10 for Swing
-swing_bias_stock1_current = request.security("NSE:HDFCBANK", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock1_ref = request.security("NSE:HDFCBANK", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock2_current = request.security("NSE:ICICIBANK", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock2_ref = request.security("NSE:ICICIBANK", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock3_current = request.security("NSE:RELIANCE", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock3_ref = request.security("NSE:RELIANCE", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock4_current = request.security("NSE:INFY", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock4_ref = request.security("NSE:INFY", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock5_current = request.security("NSE:BHARTIARTL", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock5_ref = request.security("NSE:BHARTIARTL", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock6_current = request.security("NSE:LT", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock6_ref = request.security("NSE:LT", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock7_current = request.security("NSE:ITC", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock7_ref = request.security("NSE:ITC", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock8_current = request.security("NSE:TCS", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock8_ref = request.security("NSE:TCS", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock9_current = request.security("NSE:SBIN", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock9_ref = request.security("NSE:SBIN", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock10_current = request.security("NSE:AXISBANK", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock10_ref = request.security("NSE:AXISBANK", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-
-// Stocks 11-20 for Swing
-swing_bias_stock11_current = request.security("NSE:KOTAKBANK", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock11_ref = request.security("NSE:KOTAKBANK", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock12_current = request.security("NSE:HCLTECH", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock12_ref = request.security("NSE:HCLTECH", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock13_current = request.security("NSE:BAJFINANCE", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock13_ref = request.security("NSE:BAJFINANCE", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock14_current = request.security("NSE:MARUTI", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock14_ref = request.security("NSE:MARUTI", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock15_current = request.security("NSE:ASIANPAINT", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock15_ref = request.security("NSE:ASIANPAINT", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock16_current = request.security("NSE:NESTLEIND", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock16_ref = request.security("NSE:NESTLEIND", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock17_current = request.security("NSE:ULTRACEMCO", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock17_ref = request.security("NSE:ULTRACEMCO", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock18_current = request.security("NSE:TITAN", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock18_ref = request.security("NSE:TITAN", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock19_current = request.security("NSE:WIPRO", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock19_ref = request.security("NSE:WIPRO", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-swing_bias_stock20_current = request.security("NSE:SUNPHARMA", str.tostring(swing_bias_update_frequency), close[0], lookahead=barmerge.lookahead_off)
-swing_bias_stock20_ref = request.security("NSE:SUNPHARMA", str.tostring(swing_bias_update_frequency), close[1], lookahead=barmerge.lookahead_off)
-
-// Arrays for Swing bias calculation - TOP 16 STOCKS
-swing_bias_current_prices = array.from(swing_bias_stock1_current, swing_bias_stock2_current, swing_bias_stock3_current, swing_bias_stock4_current, swing_bias_stock5_current, swing_bias_stock6_current, swing_bias_stock7_current, swing_bias_stock8_current, swing_bias_stock9_current, swing_bias_stock10_current, swing_bias_stock11_current, swing_bias_stock12_current, swing_bias_stock13_current, swing_bias_stock14_current, swing_bias_stock15_current, swing_bias_stock16_current)
-swing_bias_ref_prices = array.from(swing_bias_stock1_ref, swing_bias_stock2_ref, swing_bias_stock3_ref, swing_bias_stock4_ref, swing_bias_stock5_ref, swing_bias_stock6_ref, swing_bias_stock7_ref, swing_bias_stock8_ref, swing_bias_stock9_ref, swing_bias_stock10_ref, swing_bias_stock11_ref, swing_bias_stock12_ref, swing_bias_stock13_ref, swing_bias_stock14_ref, swing_bias_stock15_ref, swing_bias_stock16_ref)
-
-// Calculate Swing bias with top 16 stocks - SEPARATE VARIABLES
-var float swing_bias_gainers_weight = 0.0
-var float swing_bias_losers_weight = 0.0
-var float swing_bias_spread = 0.0
-var string swing_current_nifty_bias = "SIDEWAYS"
-var int swing_bias_gainers_count = 0
-var int swing_bias_losers_count = 0
-var int swing_bias_unchanged_count = 0
-
-// Update Swing bias calculation with configurable thresholds - SEPARATE FROM MAIN BIAS
-if barstate.isconfirmed
-    swing_temp_gainers_weight = 0.0
-    swing_temp_losers_weight = 0.0
-    swing_temp_gainers_count = 0
-    swing_temp_losers_count = 0
-    swing_temp_unchanged_count = 0
-    
-    for i = 0 to 15  // Top 16 stocks for Swing
-        weight = array.get(bias_top16_weights, i)  // Use same weights but separate calculation
-        stock_current = array.get(swing_bias_current_prices, i)
-        stock_ref = array.get(swing_bias_ref_prices, i)
-        
-        change_pct = stock_ref != 0 and not na(stock_ref) and not na(stock_current) ? 
-                     ((stock_current - stock_ref) / stock_ref) * 100 : 0.0
-        
-        if change_pct > swing_bias_change_threshold
-            swing_temp_gainers_weight += weight
-            swing_temp_gainers_count += 1
-        else if change_pct < -swing_bias_change_threshold
-            swing_temp_losers_weight += weight
-            swing_temp_losers_count += 1
-        else
-            swing_temp_unchanged_count += 1
-    
-    swing_bias_gainers_weight := swing_temp_gainers_weight
-    swing_bias_losers_weight := swing_temp_losers_weight
-    swing_bias_gainers_count := swing_temp_gainers_count
-    swing_bias_losers_count := swing_temp_losers_count
-    swing_bias_unchanged_count := swing_temp_unchanged_count
-    
-    swing_bias_spread := swing_bias_gainers_weight - swing_bias_losers_weight
-    swing_current_nifty_bias := swing_bias_spread > swing_bias_bull_threshold ? "BULL" : swing_bias_spread < swing_bias_bear_threshold ? "BEAR" : "SIDEWAYS"
-
-// Swing bias confluence functions - SEPARATE FROM MAIN BIAS
-isSwingBiasAllowedForBuy() =>
-    if not swing_enable_bias_confluence
-        true
-    else
-        swing_current_nifty_bias == "BULL"
-
-isSwingBiasAllowedForSell() =>
-    if not swing_enable_bias_confluence
-        true
-    else
-        swing_current_nifty_bias == "BEAR"
-
-// Swing bias info functions
-getSwingBiasSpreadInfo() => (swing_bias_spread > 0 ? "+" + str.tostring(swing_bias_spread, "#.##") : str.tostring(swing_bias_spread, "#.##")) + " (" + str.tostring(swing_bias_gainers_count) + "G/" + str.tostring(swing_bias_losers_count) + "L/" + str.tostring(swing_bias_unchanged_count) + "U)"
-
-getSwingBiasThresholdInfo() => "Bull>" + str.tostring(swing_bias_bull_threshold, "#.#") + " | Bear<" + str.tostring(swing_bias_bear_threshold, "#.#")
-
-getSwingBiasCoverageInfo() => "Swing Top16: " + str.tostring(math.round(swing_bias_gainers_weight + swing_bias_losers_weight, 1)) + "% coverage"
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // BOLLINGER BAND REVERSAL STRATEGY INPUTS - IMPROVED SL LOGIC
@@ -445,10 +196,9 @@ swing_colorBars = input.bool(title="Color bars", defval=false, group="Swing Stra
 swing_show_label_signals = input.bool(false, title="Show Label signals", group="Swing Strategy")
 swing_percentSqueeze = input.float(0.2, step=0.1, title="Percent Squeeze", group="Swing Strategy")
 
-swing_exit_on_plot_cross = input.bool(true, title="Exit trade on candle close across plot", group="Swing Strategy")
+ 
 
 // NEW: Toggle for Squeeze and Normal Signal Types
-swing_show_marron_teal_signals = input.bool(true, title="Show Buy/Sell on Maroon/Teal (Squeeze) Bars", group="Swing Strategy")
 swing_show_lime_red_signals = input.bool(true, title="Show Buy/Sell on Lime/Red (Normal) Bars", group="Swing Strategy")
 
 // Tilson T3 Inputs
@@ -457,27 +207,19 @@ swing_T3Length = input.int(defval=7, minval=1, title="Swing T3 Length", group="S
 
 // Strategy Options
 swing_use_star_based_exit = input.bool(true, title="Use Star-Based Exit (vs Fixed SL/TP)", group="Swing Strategy")
-swing_exit_on_second_star = input.bool(false, title="Exit on 2nd About-to-Exit Star", group="Swing Strategy")
+
 swing_fixed_sl_points = input.float(20.0, title="Fixed SL Points (if not using star-based)", group="Swing Strategy")
 swing_fixed_tp_points = input.float(40.0, title="Fixed TP Points (if not using star-based)", group="Swing Strategy")
 
 swing_volume_ma_length = input.int(20, title="Volume MA Length", group="Swing Strategy")
-swing_volume_multiplier = input.float(1.0, title="Volume Multiplier", group="Swing Strategy")
+swing_volume_multiplier = input.float(1.0, step=0.1, title="Volume Multiplier", group="Swing Strategy")
 
 
-// RE-ENTRY DISPLAY SETTINGS
-swing_show_reentry_labels = input.bool(true, title="Show Re-Entry Labels", group="Swing Strategy")
-swing_show_reentry_levels = input.bool(true, title="Show Re-Entry SL/TP Lines", group="Swing Strategy")
-swing_reentry_line_length = input.int(10, title="Re-Entry Line Length", minval=5, maxval=50, group="Swing Strategy")
-
-
-swing_enable_first_n_colored_entry = input.bool(true, title="Enable Entry Only on First N Consecutive Color Bars", group="Swing Strategy")
-swing_first_n_colored_bars = input.int(3, title="N: Max Number of Consecutive Color Bars for Entry", minval=1, maxval=20, group="Swing Strategy")
 
 swing_enable_atr_trail_exit = input.bool(true, title="Enable ATR Trailing Stop Exit", group="Swing Strategy")
 swing_atr_trail_period = input.int(5, title="ATR Trail Period", group="Swing Strategy")
 swing_atr_trail_hhv = input.int(10, title="ATR Trail HHV Period", group="Swing Strategy")
-swing_atr_trail_mult = input.float(2.5, title="ATR Trail Multiplier", group="Swing Strategy")
+swing_atr_trail_mult = input.float(2.5, step=0.1, title="ATR Trail Multiplier", group="Swing Strategy")
 
 swing_enable_alerts = input.bool(true, title="Enable Swing Alerts", group="Swing Strategy")
 
@@ -628,10 +370,7 @@ isSlOrTpHitInCurrentCandle(entry_price, stop_loss, take_profit, is_buy_trade) =>
         // For SELL: SL hit if high >= stop_loss, TP hit if low <= take_profit
         (not na(stop_loss) and high >= stop_loss) or (not na(take_profit) and low <= take_profit)
 
-// Reset re-entry flag on new day
-if dayofweek != dayofweek[1] and barstate.isconfirmed
-    swing_re_entry_done_today := false
-    
+
 
 
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -1059,7 +798,6 @@ else
     swing_htf_trend := 1  // Default to bullish when disabled
 swing_htf_supertrend = swing_htf_trend == 1 ? swing_htf_tup : swing_htf_tdown
 
-// HTF Supertrend confluence functions
 // HTF confluence validation (direct boolean expressions)
 swing_htf_bullish = swing_htf_trend == 1
 swing_htf_bearish = swing_htf_trend == -1
@@ -1145,10 +883,9 @@ swing_consecutive_color_count := swing_bar_is_lime_or_red ? (swing_bar_is_lime_o
 swing_entry_allowed = enable_swing_strategy and not swing_in_trade and isSwingStartTimeValid()
 
 
-swing_buy_signal_condition = (((swing_show_lime_red_signals and swing_is_normal_bar and swing_o2 < swing_c2 and close > swing_crossPlot and swing_is_green_candle and swing_vol_filter) or (swing_is_squeeze_bar and swing_green_star)) and swing_entry_allowed and isBiasAllowedForBuy() and swing_htf_buy_confluence)
+swing_buy_signal_condition = (((swing_show_lime_red_signals and swing_is_normal_bar and swing_o2 < swing_c2 and close > swing_crossPlot and swing_is_green_candle and swing_vol_filter) or (swing_is_squeeze_bar and swing_o2 < swing_c2 and close > swing_crossPlot)) and swing_htf_buy_confluence)
 
-swing_sell_signal_condition = (((swing_show_lime_red_signals and swing_is_normal_bar and swing_o2 > swing_c2 and close < swing_crossPlot and swing_is_red_candle and swing_vol_filter) or (swing_is_squeeze_bar and swing_red_star)) and swing_entry_allowed and isBiasAllowedForSell() and swing_htf_sell_confluence)
-
+swing_sell_signal_condition = (((swing_show_lime_red_signals and swing_is_normal_bar and swing_o2 > swing_c2 and close < swing_crossPlot and swing_is_red_candle and swing_vol_filter) or (swing_is_squeeze_bar and swing_o2 > swing_c2 and close < swing_crossPlot)) and swing_htf_sell_confluence)
 swing_hat_buy_signal = swing_buy_signal_condition and swing_entry_allowed 
 swing_hat_sell_signal = swing_sell_signal_condition and swing_entry_allowed
 
@@ -1160,9 +897,10 @@ swing_hat_sell_signal = swing_sell_signal_condition and swing_entry_allowed
 // Reset swing signal flag each bar
 swing_signal_this_bar := false
 
+
 // Apply bias confluence for swing strategy (separate from other strategies)
-swing_bias_allowed_buy = isSwingBiasAllowedForBuy()
-swing_bias_allowed_sell = isSwingBiasAllowedForSell()
+swing_bias_allowed_buy = isBiasAllowedForBuy()
+swing_bias_allowed_sell = isBiasAllowedForSell()
 
 // Check if swing signals should be blocked by overlap filter
 swing_overlap_blocked = enable_overlap_filter and any_strategy_active
