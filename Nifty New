@@ -3,7 +3,7 @@
 // TBH Pure Supertrend Trailing Logic - Performance Table Fixed + Bias Confluence
 // Current Date and Time (UTC): 2025-09-22 16:07:54
 // Current User: tradeapple990-bot
-indicator('Nifty New + Bias', overlay=true, max_bars_back=501, max_lines_count=400)
+indicator('Swing and TBH', overlay=true, max_bars_back=501, max_lines_count=400)
 
 
 // ═════════════════════════════════════════════════════════════════
@@ -1532,7 +1532,6 @@ if barstate.islast and show_performance_table
     // Strategy Summary Row - UPDATED WITH 3 STRATEGIES
     table.cell(performanceTable, 0, 14, 'STRATEGIES', text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 60))
     table.cell(performanceTable, 2, 14, 'TBH-TRAIL: ' + str.tostring(tbh_tp_count) + '/' + str.tostring(tbh_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.lime, 60))
-    table.cell(performanceTable, 4, 14, 'BIAS: ' + current_nifty_bias, text_color=color.white, text_size=size.small, bgcolor=current_nifty_bias == "BULL" ? color.new(color.green, 60) : current_nifty_bias == "BEAR" ? color.new(color.red, 60) : color.new(color.orange, 60))
     
     // Enable/Disable Status - UPDATED WITH 3 STRATEGIES + BIAS
     tbh_status = enable_tbh_strategy ? "ON" : "OFF"
@@ -1719,8 +1718,9 @@ if tbh_enable_alerts and enable_tbh_strategy
         
         tp_mode_info = tbh_tp_mode == "Fixed TP" ? " | Fixed TP: " + str.tostring(tbh_entry_price + tbh_fixed_tp_points, "#.##") : " | PURE TRAILING MODE"
         sl_method_info = " | Initial SL: " + tbh_initial_sl_type + " (" + str.tostring(tbh_initial_sl, "#.##") + ") | ST: " + str.tostring(tbh_supertrend, "#.##") + tp_mode_info
+        bias_info = enable_tbh_bias_confluence ? " | TBH BIAS: " + tbh_current_nifty_bias + " (" + getTBHBiasSpreadInfo() + ")" : " | TBH BIAS: DISABLED"
         
-        alert("TBH-" + tbh_tp_mode + " BUY SIGNAL: RSI crossed above oversold (" + str.tostring(tbh_rsi_oversold) + ") and price above Fib 0.618" + candle_info + enhanced_info + sl_method_info + " | BIAS: " + current_nifty_bias + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+        alert("TBH-" + tbh_tp_mode + " BUY SIGNAL: RSI crossed above oversold (" + str.tostring(tbh_rsi_oversold) + ") and price above Fib 0.618" + candle_info + enhanced_info + sl_method_info + bias_info + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
     if tbh_sell_condition
         candle_info = tbh_use_candle_color ? " on RED candle" : ""
@@ -1739,8 +1739,9 @@ if tbh_enable_alerts and enable_tbh_strategy
                 enhanced_info := " (Close ≤ Prev Close - " + str.tostring(buffer_points, "#.#") + "pts: " + str.tostring(close, "#.##") + " ≤ " + str.tostring(target_level, "#.##") + ", diff: -" + str.tostring(actual_diff, "#.#") + "pts)"
         
         sl_method_info = " | Initial SL: " + tbh_initial_sl_type + " (" + str.tostring(tbh_initial_sl, "#.##") + ") | ST: " + str.tostring(tbh_supertrend, "#.##") + " | NO FIXED TP - PURE TRAIL"
+        bias_info = enable_tbh_bias_confluence ? " | TBH BIAS: " + tbh_current_nifty_bias + " (" + getTBHBiasSpreadInfo() + ")" : " | TBH BIAS: DISABLED"
         
-        alert("TBH-TRAIL SELL SIGNAL: RSI crossed below overbought (" + str.tostring(tbh_rsi_overbought) + ") and price below Fib 0.382" + candle_info + enhanced_info + sl_method_info + " | BIAS: " + current_nifty_bias + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+        alert("TBH-TRAIL SELL SIGNAL: RSI crossed below overbought (" + str.tostring(tbh_rsi_overbought) + ") and price below Fib 0.382" + candle_info + enhanced_info + sl_method_info + bias_info + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
     if tbh_tp_hit
         exit_method = tbh_supertrend_activated ? "Supertrend trailing signal" : "Initial SL method"
@@ -1760,8 +1761,6 @@ if tbh_enable_alerts and enable_tbh_strategy
 
 
 
-
-
 alertcondition(tbh_buy_condition and tbh_use_enhanced_entry, 'TBH-TRAIL Enhanced Buy Entry', 'TBH-TRAIL Buy Signal with Enhanced Entry Validation')
 alertcondition(tbh_sell_condition and tbh_use_enhanced_entry, 'TBH-TRAIL Enhanced Sell Entry', 'TBH-TRAIL Sell Signal with Enhanced Entry Validation')
 alertcondition(tbh_tp_hit, 'TBH-TRAIL Take Profit', 'TBH-TRAIL Take Profit Hit')
@@ -1769,18 +1768,18 @@ alertcondition(tbh_sl_hit, 'TBH-TRAIL Stop Loss', 'TBH-TRAIL Stop Loss Hit')
 
 
 
-
 // SWING Alerts
 if swing_enable_alerts and enable_swing_strategy
     if swing_buy_entry
         exit_info = swing_use_star_based_exit ? " | Exit Mode: Star-based (exit on red star)" : " | Exit Mode: Fixed SL/TP"
-        bias_info = enable_tbh_bias_confluence or enable_swing_bias_confluence ? " | Swing Bias: " + current_nifty_bias + " (" + getBiasSpreadInfo() + ")" : " | Swing Bias: DISABLED"
+        bias_info = enable_swing_bias_confluence ? " | Swing Bias: " + swing_current_nifty_bias + " (" + getSwingBiasSpreadInfo() + ")" : " | Swing Bias: DISABLED"
         alert("SWING BUY SIGNAL: Entry at " + str.tostring(close, "#.##") + exit_info + bias_info + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
     
     if swing_sell_entry
         exit_info = swing_use_star_based_exit ? " | Exit Mode: Star-based (exit on green star)" : " | Exit Mode: Fixed SL/TP"
-        bias_info = enable_tbh_bias_confluence or enable_swing_bias_confluence ? " | Swing Bias: " + current_nifty_bias + " (" + getBiasSpreadInfo() + ")" : " | Swing Bias: DISABLED"
+        bias_info = enable_swing_bias_confluence ? " | Swing Bias: " + swing_current_nifty_bias + " (" + getSwingBiasSpreadInfo() + ")" : " | Swing Bias: DISABLED"
         alert("SWING SELL SIGNAL: Entry at " + str.tostring(close, "#.##") + exit_info + bias_info + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
     if swing_tp_hit_alert
         exit_type = swing_use_star_based_exit ? "STAR-BASED" : "FIXED"
         alert("SWING TAKE PROFIT (" + exit_type + "): Position closed with profit at " + str.tostring(close, "#.##") + " | Points: +" + str.tostring(math.abs(swing_trade_points_tp), "#.##") + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
@@ -1788,6 +1787,8 @@ if swing_enable_alerts and enable_swing_strategy
     if swing_sl_hit_alert
         exit_type = swing_use_star_based_exit ? "STAR-BASED" : "FIXED"
         alert("SWING STOP LOSS (" + exit_type + "): Position closed with loss at " + str.tostring(close, "#.##") + " | Points: -" + str.tostring(math.abs(swing_trade_points_sl), "#.##") + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
+
 
 // Swing Alert Conditions
 alertcondition(swing_buy_entry and enable_swing_strategy, 'Swing Buy Signal', 'Swing Buy Signal Triggered')
@@ -1821,9 +1822,6 @@ bgcolor(overlap_detected ? color.new(color.yellow, 85) : na, title="Same Bar Ove
 bgcolor(active_trade_blocks ? color.new(color.orange, 85) : na, title="Active Trade Blocks Signal")
 bgcolor(isEntryBlocked() ? color.new(color.gray, 90) : na, title="Entries Blocked After 3:15 PM")
 
-// Bias confluence background highlighting
-bgcolor(enable_tbh_bias_confluence or enable_swing_bias_confluence and current_nifty_bias == "BULL" ? color.new(color.green, 95) : na, title="Bull Bias Active")
-bgcolor(enable_tbh_bias_confluence or enable_swing_bias_confluence and current_nifty_bias == "BEAR" ? color.new(color.red, 95) : na, title="Bear Bias Active")
 
 // Highlight Supertrend direction changes and activation
 bgcolor(tbh_direction != tbh_direction[1] and enable_tbh_strategy and show_tbh_supertrend ? color.new(color.blue, 95) : na, title="Supertrend Direction Change")
