@@ -895,40 +895,33 @@ if swing_final_sell_signal and not swing_in_trade
         alert("Swing SELL Signal - Entry: " + str.tostring(swing_entry_price, "#.##"), alert.freq_once_per_bar)
 
 // ═════════════════════════════════════════════════════════════════
-// SWING ATR TRAILING STOP - MATCHING BREAKOUT LOGIC EXACTLY
+// SWING ATR TRAILING STOP - EXACT BREAKOUT REPLICA
 // ═════════════════════════════════════════════════════════════════
 
-// Calculate the adjusted high values (like breakout does with high - ATR*mult)
-swing_atr_base = ta.atr(swing_atr_trail_period)
-swing_adjusted_low = normal_low - swing_atr_trail_mult * swing_atr_base  // For BUY trailing
-swing_adjusted_high = normal_high + swing_atr_trail_mult * swing_atr_base  // For SELL trailing
+// BUY TRAIL: Replicates Breakout's logic for long positions
+// NOTE: ATR is recalculated INSIDE ta.highest() for each historical bar
+swing_Prev_long = ta.highest(normal_low - swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
+swing_cum_long = ta.cum(1)
+swing_highest_long_1 = ta.highest(normal_low - swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
+swing_highest_long_2 = ta.highest(normal_low - swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
+swing_iff_long = normal_close > swing_highest_long_1 and normal_close > normal_close[1] ? swing_highest_long_2 : swing_Prev_long
+swing_TS_long = swing_cum_long < 16 ? normal_close : swing_iff_long
 
-// Get highest of adjusted lows (for BUY trail) over HHV period
-swing_Prev_long = ta.highest(swing_adjusted_low, swing_atr_trail_hhv)
-swing_highest_long_1 = ta.highest(swing_adjusted_low, swing_atr_trail_hhv)
-swing_highest_long_2 = ta.highest(swing_adjusted_low, swing_atr_trail_hhv)
-
-// Get lowest of adjusted highs (for SELL trail) over HHV period  
-swing_Prev_short = ta.lowest(swing_adjusted_high, swing_atr_trail_hhv)
-swing_lowest_short_1 = ta.lowest(swing_adjusted_high, swing_atr_trail_hhv)
-swing_lowest_short_2 = ta.lowest(swing_adjusted_high, swing_atr_trail_hhv)
-
-// Apply breakout's conditional logic for BUY trail
-swing_iff_long = normal_close > swing_highest_long_1 and normal_close > normal_close[1] ? 
-                 swing_highest_long_2 : swing_Prev_long
-
-// Apply breakout's conditional logic for SELL trail (inverse)
-swing_iff_short = normal_close < swing_lowest_short_1 and normal_close < normal_close[1] ? 
-                  swing_lowest_short_2 : swing_Prev_short
-
-// Initial bars handling (matching breakout's cum_1 < 16 check)
-swing_cum = ta.cum(1)
-swing_TS_long = swing_cum < 16 ? normal_close : swing_iff_long
-swing_TS_short = swing_cum < 16 ? normal_close : swing_iff_short
+// SELL TRAIL: Inverse logic for short positions
+// NOTE: ATR is recalculated INSIDE ta.lowest() for each historical bar
+swing_Prev_short = ta.lowest(normal_high + swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
+swing_cum_short = ta.cum(1)
+swing_lowest_short_1 = ta.lowest(normal_high + swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
+swing_lowest_short_2 = ta.lowest(normal_high + swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
+swing_iff_short = normal_close < swing_lowest_short_1 and normal_close < normal_close[1] ? swing_lowest_short_2 : swing_Prev_short
+swing_TS_short = swing_cum_short < 16 ? normal_close : swing_iff_short
 
 // Final trailing stops
 swing_long_stop_raw = swing_TS_long
 swing_short_stop_raw = swing_TS_short
+
+// ATR value for label positioning (calculate once for display purposes)
+swing_atr_base = ta.atr(swing_atr_trail_period)
 
 var float swing_lower_atr_trail = na
 var float swing_upper_atr_trail = na
