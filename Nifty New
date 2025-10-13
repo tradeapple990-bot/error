@@ -895,10 +895,10 @@ if swing_final_sell_signal and not swing_in_trade
         alert("Swing SELL Signal - Entry: " + str.tostring(swing_entry_price, "#.##"), alert.freq_once_per_bar)
 
 // ═════════════════════════════════════════════════════════════════
-// SWING ATR TRAILING STOP - 100% EXACT BREAKOUT REPLICA
+// SWING ATR TRAILING STOP - EXACT BREAKOUT MATCH ON HA CHART
 // ═════════════════════════════════════════════════════════════════
 
-// BUY TRAIL: Uses raw low/high like Breakout (NOT normal_low/normal_high)
+// BUY TRAIL: For long positions (matches Breakout exactly)
 swing_Prev_long = ta.highest(low - swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
 swing_cum_long = ta.cum(1)
 swing_highest_long_1 = ta.highest(low - swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
@@ -906,7 +906,7 @@ swing_highest_long_2 = ta.highest(low - swing_atr_trail_mult * ta.atr(swing_atr_
 swing_iff_long = close > swing_highest_long_1 and close > close[1] ? swing_highest_long_2 : swing_Prev_long
 swing_TS_long = swing_cum_long < 16 ? close : swing_iff_long
 
-// SELL TRAIL: Uses raw low/high like Breakout (NOT normal_low/normal_high)
+// SELL TRAIL: For short positions (inverse of long)
 swing_Prev_short = ta.lowest(high + swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
 swing_cum_short = ta.cum(1)
 swing_lowest_short_1 = ta.lowest(high + swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
@@ -914,27 +914,33 @@ swing_lowest_short_2 = ta.lowest(high + swing_atr_trail_mult * ta.atr(swing_atr_
 swing_iff_short = close < swing_lowest_short_1 and close < close[1] ? swing_lowest_short_2 : swing_Prev_short
 swing_TS_short = swing_cum_short < 16 ? close : swing_iff_short
 
-// Final trailing stops
-swing_long_stop_raw = swing_TS_long
-swing_short_stop_raw = swing_TS_short
-
 // ATR value for label positioning
 swing_atr_base = ta.atr(swing_atr_trail_period)
 
+// CORRECTED RATCHETING LOGIC - Only update the active trail
 var float swing_lower_atr_trail = na
 var float swing_upper_atr_trail = na
 
-// For BUY trades: trail up, never decrease
-if not swing_in_trade or swing_trade_type != "BUY"
-    swing_lower_atr_trail := swing_long_stop_raw
-else
-    swing_lower_atr_trail := math.max(swing_lower_atr_trail[1], swing_long_stop_raw)
+// Initialize on first bar
+if bar_index == 0
+    swing_lower_atr_trail := swing_TS_long
+    swing_upper_atr_trail := swing_TS_short
 
-// For SELL trades: trail down, never increase
-if not swing_in_trade or swing_trade_type != "SELL"
-    swing_upper_atr_trail := swing_short_stop_raw
-else
-    swing_upper_atr_trail := math.min(swing_upper_atr_trail[1], swing_short_stop_raw)
+// For BUY trades: Use lower trail, only update it when in BUY trade
+if swing_in_trade and swing_trade_type == "BUY"
+    // Trail up, never decrease
+    swing_lower_atr_trail := math.max(nz(swing_lower_atr_trail[1], swing_TS_long), swing_TS_long)
+else if not swing_in_trade
+    // Reset to current value when not in trade
+    swing_lower_atr_trail := swing_TS_long
+
+// For SELL trades: Use upper trail, only update it when in SELL trade
+if swing_in_trade and swing_trade_type == "SELL"
+    // Trail down, never increase
+    swing_upper_atr_trail := math.min(nz(swing_upper_atr_trail[1], swing_TS_short), swing_TS_short)
+else if not swing_in_trade
+    // Reset to current value when not in trade
+    swing_upper_atr_trail := swing_TS_short
 
 // Exit flags
 
@@ -1852,3 +1858,7 @@ bgcolor(tbh_in_trade and tbh_supertrend_activated and not tbh_supertrend_activat
 // Color candles based on active trades - Updated with 3 strategies
 barcolor(tbh_in_trade and enable_tbh_strategy and tbh_trade_type == "BUY" ? color.new(color.aqua, 70) :
          tbh_in_trade and enable_tbh_strategy and tbh_trade_type == "SELL" ? color.new(color.fuchsia, 70) : na)
+
+
+// debug
+plot(swing_TS_long, "Swing Trail", color=color.new(#d0d8df, 0), linewidth=3)
