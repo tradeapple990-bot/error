@@ -894,15 +894,16 @@ if swing_final_sell_signal and not swing_in_trade
     if swing_enable_alerts
         alert("Swing SELL Signal - Entry: " + str.tostring(swing_entry_price, "#.##"), alert.freq_once_per_bar)
 
-// Dual ATR trailing stop logic with HHV/LLV
+// Dual ATR trailing stop logic - CORRECTED TO MATCH BREAKOUT LOGIC
 swing_atr = request.security(base_ticker, timeframe.period, ta.atr(swing_atr_trail_period), lookahead=barmerge.lookahead_off)
 
-// Use HHV/LLV over the specified period instead of current bar's high/low
-swing_hhv = ta.highest(normal_high, swing_atr_trail_hhv)  // Highest high over HHV period
-swing_llv = ta.lowest(normal_low, swing_atr_trail_hhv)    // Lowest low over HHV period
+// Calculate ATR-adjusted values for each bar FIRST (like breakout does)
+swing_long_stop_calc = normal_low - swing_atr_trail_mult * swing_atr   // Low minus ATR offset
+swing_short_stop_calc = normal_high + swing_atr_trail_mult * swing_atr  // High plus ATR offset
 
-swing_long_stop_raw = swing_llv - swing_atr_trail_mult * swing_atr   // Use LLV for long stops
-swing_short_stop_raw = swing_hhv + swing_atr_trail_mult * swing_atr  // Use HHV for short stops
+// Then find HHV/LLV of these ADJUSTED values (matching breakout logic)
+swing_long_stop_raw = ta.highest(swing_long_stop_calc, swing_atr_trail_hhv)   // Highest of adjusted lows
+swing_short_stop_raw = ta.lowest(swing_short_stop_calc, swing_atr_trail_hhv)  // Lowest of adjusted highs
 
 var float swing_lower_atr_trail = na
 var float swing_upper_atr_trail = na
