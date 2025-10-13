@@ -894,16 +894,41 @@ if swing_final_sell_signal and not swing_in_trade
     if swing_enable_alerts
         alert("Swing SELL Signal - Entry: " + str.tostring(swing_entry_price, "#.##"), alert.freq_once_per_bar)
 
-// Dual ATR trailing stop logic - CORRECTED TO MATCH BREAKOUT LOGIC
-swing_atr = request.security(base_ticker, timeframe.period, ta.atr(swing_atr_trail_period), lookahead=barmerge.lookahead_off)
+// ═════════════════════════════════════════════════════════════════
+// SWING ATR TRAILING STOP - MATCHING BREAKOUT LOGIC EXACTLY
+// ═════════════════════════════════════════════════════════════════
 
-// Calculate ATR-adjusted values for each bar FIRST (like breakout does)
-swing_long_stop_calc = normal_low - swing_atr_trail_mult * swing_atr   // Low minus ATR offset
-swing_short_stop_calc = normal_high + swing_atr_trail_mult * swing_atr  // High plus ATR offset
+// Calculate the adjusted high values (like breakout does with high - ATR*mult)
+swing_atr_base = ta.atr(swing_atr_trail_period)
+swing_adjusted_low = normal_low - swing_atr_trail_mult * swing_atr_base  // For BUY trailing
+swing_adjusted_high = normal_high + swing_atr_trail_mult * swing_atr_base  // For SELL trailing
 
-// Then find HHV/LLV of these ADJUSTED values (matching breakout logic)
-swing_long_stop_raw = ta.highest(swing_long_stop_calc, swing_atr_trail_hhv)   // Highest of adjusted lows
-swing_short_stop_raw = ta.lowest(swing_short_stop_calc, swing_atr_trail_hhv)  // Lowest of adjusted highs
+// Get highest of adjusted lows (for BUY trail) over HHV period
+swing_Prev_long = ta.highest(swing_adjusted_low, swing_atr_trail_hhv)
+swing_highest_long_1 = ta.highest(swing_adjusted_low, swing_atr_trail_hhv)
+swing_highest_long_2 = ta.highest(swing_adjusted_low, swing_atr_trail_hhv)
+
+// Get lowest of adjusted highs (for SELL trail) over HHV period  
+swing_Prev_short = ta.lowest(swing_adjusted_high, swing_atr_trail_hhv)
+swing_lowest_short_1 = ta.lowest(swing_adjusted_high, swing_atr_trail_hhv)
+swing_lowest_short_2 = ta.lowest(swing_adjusted_high, swing_atr_trail_hhv)
+
+// Apply breakout's conditional logic for BUY trail
+swing_iff_long = normal_close > swing_highest_long_1 and normal_close > normal_close[1] ? 
+                 swing_highest_long_2 : swing_Prev_long
+
+// Apply breakout's conditional logic for SELL trail (inverse)
+swing_iff_short = normal_close < swing_lowest_short_1 and normal_close < normal_close[1] ? 
+                  swing_lowest_short_2 : swing_Prev_short
+
+// Initial bars handling (matching breakout's cum_1 < 16 check)
+swing_cum = ta.cum(1)
+swing_TS_long = swing_cum < 16 ? normal_close : swing_iff_long
+swing_TS_short = swing_cum < 16 ? normal_close : swing_iff_short
+
+// Final trailing stops
+swing_long_stop_raw = swing_TS_long
+swing_short_stop_raw = swing_TS_short
 
 var float swing_lower_atr_trail = na
 var float swing_upper_atr_trail = na
@@ -1672,14 +1697,14 @@ plotshape(
 // ─── Swing exit labels (TP and SL)
 if swing_tp_hit_alert and enable_swing_strategy
     actual_tp_points = math.abs(swing_trade_points_tp)
-    label_y = swing_trade_type == "BUY" ? high + (swing_atr * 2) : low - (swing_atr * 2)
+    label_y = swing_trade_type == "BUY" ? high + (swing_atr_base * 2) : low - (swing_atr_base * 2)
     label_style = swing_trade_type == "BUY" ? label.style_label_down : label.style_label_up
     exit_type = swing_use_star_based_exit ? "STAR" : "FIXED"
     label.new(x=bar_index, y=label_y, text="✅ SWING " + exit_type + " TP +" + str.tostring(math.round(actual_tp_points, 1)) + " pts", style=label_style, color=color.new(color.blue, 0), textcolor=color.white, size=size.small)
 
 if swing_sl_hit_alert and enable_swing_strategy
     actual_sl_points = math.abs(swing_trade_points_sl)
-    label_y = swing_trade_type == "BUY" ? low - (swing_atr * 2) : high + (swing_atr * 2)
+    label_y = swing_trade_type == "BUY" ? low - (swing_atr_base * 2) : high + (swing_atr_base * 2)
     label_style = swing_trade_type == "BUY" ? label.style_label_up : label.style_label_down
     exit_type = swing_use_star_based_exit ? "STAR" : "FIXED"
     label.new(x=bar_index, y=label_y, text="❌ SWING " + exit_type + " SL -" + str.tostring(math.round(actual_sl_points, 1)) + " pts", style=label_style, color=color.new(color.purple, 0), textcolor=color.white, size=size.small)
