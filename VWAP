@@ -70,7 +70,8 @@ enable_volume_filter = input.bool(false, title="✅ Enable Volume Above EMA Filt
 volume_ema_length = input.int(20, title="Volume EMA Length", minval=5, maxval=100, group="Confluence Filters")
 volume_multiplier = input.float(1.2, title="Volume Multiplier", minval=1.0, maxval=3.0, step=0.1, group="Confluence Filters")
 
-
+// ATR Trail Confluence Filter Settings
+enable_atr_confluence = input.bool(true, title="✅ Enable ATR Trail Confluence", group="Confluence Filters", tooltip="BUY only when price above Slow Trail, SELL only when price below Slow Trail")
 
 // Auto Exit Settings
 enable_315_exit = input.bool(true, title="✅ Enable 3:15 PM Auto Exit", group="Exit Settings")
@@ -317,6 +318,24 @@ Sell_ATR = ta.crossunder(Trail1, Trail2)
 iff_5 = Trail2 > Trail1 ? -1 : 0
 SR = Trail1 > Trail2 ? 1 : iff_5
 
+
+// ═════════════════════════════════════════════════════════════════
+// ATR TRAIL CONFLUENCE FILTERS FOR ENTRY
+// ═════════════════════════════════════════════════════════════════
+
+// Check if price position supports trade direction
+price_above_slow_trail = close > Trail2
+price_below_slow_trail = close < Trail2
+
+// Check if trails are in correct formation for trend
+trails_support_buy = Trail1 > Trail2  // Fast above Slow = Bullish
+trails_support_sell = Trail2 > Trail1  // Slow above Fast = Bearish
+
+// Combined ATR confluence for entries
+atr_confluence_buy = price_above_slow_trail and trails_support_buy
+atr_confluence_sell = price_below_slow_trail and trails_support_sell
+
+
 // ═══════════════════════════════════════════════════════════════════════════════════
 // TRADE STATE VARIABLES
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -344,7 +363,9 @@ var bool signal_blocked_this_bar = false
 // Bias filter tracking
 var int bias_blocked_signals_count = 0
 var bool bias_blocked_this_bar = false
-
+// ATR confluence filter tracking
+var int atr_blocked_signals_count = 0
+var bool atr_blocked_this_bar = false
 // ═══════════════════════════════════════════════════════════════════════════════════
 // VWAP CROSSOVER DETECTION WITH OVERLAP PREVENTION
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -443,13 +464,12 @@ bias_blocked_this_bar := bias_blocked_buy or bias_blocked_sell
 if bias_blocked_this_bar
     bias_blocked_signals_count := bias_blocked_signals_count + 1
 
-// ═══════════════════════════════════════════════════════════════════════════════════
-// SIGNAL GENERATION WITH ALL FILTERS
-// ═══════════════════════════════════════════════════════════════════════════════════
+// ATR confluence condition
+atr_condition_buy = not enable_atr_confluence or atr_confluence_buy
+atr_condition_sell = not enable_atr_confluence or atr_confluence_sell
 
-vwap_buy_signal = vwap_cross_above and adx_condition and volume_condition and bias_allows_buy and enable_vwap_strategy and not isEntryBlocked()
-vwap_sell_signal = vwap_cross_below and adx_condition and volume_condition and bias_allows_sell and enable_vwap_strategy and not isEntryBlocked()
-
+vwap_buy_signal = vwap_cross_above and adx_condition and volume_condition and bias_allows_buy and atr_condition_buy and enable_vwap_strategy and not isEntryBlocked()
+vwap_sell_signal = vwap_cross_below and adx_condition and volume_condition and bias_allows_sell and atr_condition_sell and enable_vwap_strategy and not isEntryBlocked()
 // ═══════════════════════════════════════════════════════════════════════════════════
 // TRADE MANAGEMENT WITH NORMAL CANDLE PRICES
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -855,16 +875,6 @@ if exit_315
     label.new(x=bar_index, y=label_y, text=label_text + str.tostring(math.round(actual_315_points, 1)) + " pts (NC)", 
               style=label_style, color=color.new(color.orange, 0), textcolor=color.white, size=size.small)
 
-// Entry labels showing both prices
-if vwap_buy_signal
-    label.new(x=bar_index, y=low - atr_value * 0.5, 
-              text="📊 Entry NC:" + str.tostring(normal_close, "#.##") + "\nHA:" + str.tostring(close, "#.##"), 
-              style=label.style_label_up, color=color.new(color.blue, 20), textcolor=color.white, size=size.tiny)
-
-if vwap_sell_signal
-    label.new(x=bar_index, y=high + atr_value * 0.5, 
-              text="📊 Entry NC:" + str.tostring(normal_close, "#.##") + "\nHA:" + str.tostring(close, "#.##"), 
-              style=label.style_label_down, color=color.new(color.purple, 20), textcolor=color.white, size=size.tiny)
 
 // Background highlighting with Ceyhun bar colors
 bcl = Green ? color.lime : Blue ? color.blue : Yellow ? color.yellow : Red ? color.red : color.white
@@ -876,23 +886,7 @@ bgcolor(complete_candle_below and not in_trade ? color.new(color.red, 90) : na, 
 bgcolor(signal_blocked_this_bar ? color.new(color.orange, 85) : na, title="Signal Blocked by Overlap Prevention")
 bgcolor(isEntryBlocked() ? color.new(color.gray, 90) : na, title="Entries Blocked After 3:15 PM")
 
-// ═══════════════════════════════════════════════════════════════════════════════════
-// DEBUG LABELS (OPTIONAL) - NOW SHOWING NORMAL CANDLE INFO
-// ═══════════════════════════════════════════════════════════════════════════════════
 
-if show_debug_labels and (bar_index % 10 == 0)
-    price_diff = normal_close - close
-    debug_text = "InTrade:" + str.tostring(in_trade) + 
-                 "\nBase:" + str.tostring(vwap_cross_above_base or vwap_cross_below_base) +
-                 "\nFinal:" + str.tostring(vwap_buy_signal or vwap_sell_signal) +
-                 "\nBlocked:" + str.tostring(blocked_signals_count) +
-                 "\nATR:" + str.tostring(SR) +
-                 "\nNC:" + str.tostring(normal_close, "#.##") +
-                 "\nHA:" + str.tostring(close, "#.##") +
-                 "\nDiff:" + str.tostring(price_diff, "#.##")
-    
-    label.new(bar_index, high + ta.atr(20), debug_text, style=label.style_label_down, 
-              color=color.yellow, textcolor=color.black, size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // ENHANCED ALERTS WITH NORMAL CANDLE INFO
@@ -937,6 +931,21 @@ if isEntryBlocked() and (vwap_cross_above or vwap_cross_below)
 if bias_blocked_this_bar and enable_alerts
     blocked_direction = bias_blocked_buy ? "BUY" : "SELL"
     alert("SIGNAL BLOCKED BY BIAS FILTER: " + blocked_direction + " signal blocked | Current Bias: " + final_market_bias + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
+
+// ATR Confluence Blocking Logic
+atr_blocked_buy = vwap_cross_above and not atr_confluence_buy and enable_atr_confluence
+atr_blocked_sell = vwap_cross_below and not atr_confluence_sell and enable_atr_confluence
+atr_blocked_this_bar := atr_blocked_buy or atr_blocked_sell
+
+if atr_blocked_this_bar
+    atr_blocked_signals_count := atr_blocked_signals_count + 1
+
+// ATR Confluence Filter Alert
+if atr_blocked_this_bar and enable_alerts
+    blocked_direction = atr_blocked_buy ? "BUY" : "SELL"
+    trail_position = atr_blocked_buy ? "Price below Trail2" : "Price above Trail2"
+    alert("SIGNAL BLOCKED BY ATR CONFLUENCE: " + blocked_direction + " signal blocked | Reason: " + trail_position + " | Trail2: " + str.tostring(Trail2, "#.##") + " | Price: " + str.tostring(close, "#.##") + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // ALERT CONDITIONS
