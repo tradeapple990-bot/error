@@ -1,0 +1,996 @@
+//@version=5
+// VWAP Crossover Strategy with ADX & Volume Filters - NO OVERLAP
+// Trailing Strategy and Performance Table Integration
+// ATR Trailing Stop by ceyhun - Integrated
+// Performance calculated on NORMAL CANDLES while entries use Heikin Ashi
+// Created by eatapple990-cmyk / Modified by tradeapple990-bot
+// Current Date and Time (UTC): 2025-09-26 17:08:24
+// Current User: tradeapple990-bot
+indicator('VWAP Cross Strategy v6 - Normal Candles', overlay=true, max_bars_back=501, max_lines_count=400)
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// NORMAL CANDLE DATA FETCH (for performance calculation)
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Get the real ticker symbol (non-Heikin Ashi)
+base_ticker = ticker.new(syminfo.prefix, syminfo.ticker, session=session.regular)
+
+// Fetch normal (real) OHLC data for performance calculations
+normal_close = request.security(base_ticker, timeframe.period, close, lookahead=barmerge.lookahead_off)
+normal_high = request.security(base_ticker, timeframe.period, high, lookahead=barmerge.lookahead_off) 
+normal_low = request.security(base_ticker, timeframe.period, low, lookahead=barmerge.lookahead_off)
+normal_open = request.security(base_ticker, timeframe.period, open, lookahead=barmerge.lookahead_off)
+
+// Helper function to determine if we're on Heikin Ashi chart
+is_heikin_ashi = str.contains(syminfo.tickerid, "heikinashi")
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// STRATEGY SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Main Strategy Toggle
+enable_vwap_strategy = input.bool(true, title="✅ Enable VWAP Crossover Strategy", group="VWAP Strategy")
+
+// VWAP Settings (using proper VWAP calculation)
+var anchor = input.string(defval = "Session", title="VWAP Anchor Period",
+ options=["Session", "Week", "Month", "Quarter", "Year", "Decade", "Century", "Earnings", "Dividends", "Splits"], group="VWAP Strategy")
+vwap_source = input.source(hlc3, title="VWAP Source", group="VWAP Strategy")
+hideonDWM = input.bool(false, title="Hide VWAP on 1D or Above", group="VWAP Strategy")
+
+// CROSSOVER LOGIC SELECTION
+crossover_mode = input.string("Complete Candle", title="Entry Logic", options=["Complete Candle", "Traditional Crossover"], group="VWAP Strategy",tooltip="Complete Candle: Triggers when entire candle is above/below VWAP. Traditional: Requires previous candle on opposite side.")
+
+// OVERLAP PREVENTION SETTING
+enable_overlap_prevention = input.bool(true, title="✅ Prevent Overlapping Signals", group="VWAP Strategy",tooltip="Blocks new signals while a trade is active. New signals only after TP/SL hit.")
+
+// MARKET BIAS FILTER SETTINGS
+enable_bias_filter = input.bool(true, title="✅ Enable Market Bias Filter", group="Confluence Filters", tooltip="Only allow buy entries in BULL bias, sell entries in BEAR bias. No entries in SIDEWAYS.")
+bias_analysis_bars = input.int(3, title="Bias Analysis Bars", minval=1, maxval=10, group="Confluence Filters", tooltip="Number of bars to analyze for bias consensus")
+bias_threshold = input.int(2, title="Bull/Bear Threshold", minval=1, maxval=10, group="Confluence Filters", tooltip="Minimum bias signals needed for Bull/Bear classification")
+sideways_threshold = input.int(2, title="Sideways Threshold", minval=1, maxval=10, group="Confluence Filters", tooltip="Minimum sideways signals needed for Sideways classification")
+change_threshold_bias = input.float(0.05, title="Gainer/Loser Threshold %", minval=0.01, step=0.01, group="Confluence Filters", tooltip="Minimum % change to classify as gainer/loser for bias calculation")
+
+// ADX Filter Settings
+enable_adx_filter = input.bool(false, title="✅ Enable ADX Trend Filter", group="Confluence Filters")
+adx_length = input.int(14, title="ADX Length", minval=1, maxval=50, group="Confluence Filters")
+adx_threshold = input.float(25.0, title="ADX Threshold", minval=10.0, maxval=50.0, step=1.0, group="Confluence Filters")
+
+
+// CEYHUN ATR TRAILING STOP SETTINGS
+SC = input(close, 'Source', group="Ceyhun ATR Trailing")
+// Fast Trail //
+AP1 = input(5, 'Fast ATR period', group="Ceyhun ATR Trailing")
+AF1 = input.float(0.5, 'Fast ATR multiplier', step=0.1, group="Ceyhun ATR Trailing")
+// Slow Trail //
+AP2 = input(10, 'Slow ATR period', group="Ceyhun ATR Trailing")
+AF2 = input.float(3, 'Slow ATR multiplier', step=0.1, group="Ceyhun ATR Trailing")
+
+// Volume Filter Settings
+enable_volume_filter = input.bool(false, title="✅ Enable Volume Above EMA Filter", group="Confluence Filters")
+volume_ema_length = input.int(20, title="Volume EMA Length", minval=5, maxval=100, group="Confluence Filters")
+volume_multiplier = input.float(1.2, title="Volume Multiplier", minval=1.0, maxval=3.0, step=0.1, group="Confluence Filters")
+
+
+
+// Auto Exit Settings
+enable_315_exit = input.bool(true, title="✅ Enable 3:15 PM Auto Exit", group="Exit Settings")
+auto_tp_time = input.bool(true, title="Auto TP at 3:15 PM", group="Exit Settings")
+
+// Alert Settings
+enable_alerts = input.bool(true, title="Enable Alerts", group="Alert Settings")
+
+// Debug Settings
+show_debug_labels = input.bool(false, title="Show Debug Labels", group="Debug Settings")
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// DISPLAY SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+show_vwap_line = input.bool(true, title="Show VWAP Line", group="Display Settings")
+show_trail_lines = input.bool(true, title="Show Trailing Lines", group="Display Settings")
+show_performance_table = input.bool(true, title="Show Performance Table", group="Display Settings")
+show_normal_candles = input.bool(true, title="Show Normal Candle Line", group="Display Settings", tooltip="Display normal candle close price line for reference")
+table_position = input.string("bottom_right", title="Table Position", options=["top_left", "top_center", "top_right", "middle_left", "middle_center", "middle_right", "bottom_left", "bottom_center", "bottom_right"], group="Display Settings")
+
+// User Info
+user_login = input.string("tradeapple990-bot", title="User Login", group="Display Settings")
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// MARKET BIAS CALCULATION
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Top 16 Nifty stocks with weights (simplified for bias calculation)
+top16_symbols = array.from("NSE:HDFCBANK", "NSE:ICICIBANK", "NSE:RELIANCE", "NSE:INFY", "NSE:BHARTIARTL", "NSE:LT", "NSE:ITC", "NSE:TCS", "NSE:SBIN", "NSE:AXISBANK", "NSE:KOTAKBANK", "NSE:ASIANPAINT", "NSE:HCLTECH", "NSE:MARUTI", "NSE:NESTLEIND", "NSE:ULTRACEMCO")
+top16_weights = array.from(13.11, 9.00, 8.31, 4.78, 4.65, 3.82, 3.45, 2.85, 2.79, 2.70, 2.65, 2.31, 2.17, 2.01, 1.89, 1.73)
+
+// Fetch stock prices (current session only - simplified for bias)
+hdfcbank_current = request.security("NSE:HDFCBANK", "5", close, lookahead=barmerge.lookahead_off)
+hdfcbank_ref = request.security("NSE:HDFCBANK", "5", close[1], lookahead=barmerge.lookahead_off)
+icicibank_current = request.security("NSE:ICICIBANK", "5", close, lookahead=barmerge.lookahead_off)
+icicibank_ref = request.security("NSE:ICICIBANK", "5", close[1], lookahead=barmerge.lookahead_off)
+reliance_current = request.security("NSE:RELIANCE", "5", close, lookahead=barmerge.lookahead_off)
+reliance_ref = request.security("NSE:RELIANCE", "5", close[1], lookahead=barmerge.lookahead_off)
+infy_current = request.security("NSE:INFY", "5", close, lookahead=barmerge.lookahead_off)
+infy_ref = request.security("NSE:INFY", "5", close[1], lookahead=barmerge.lookahead_off)
+bhartiartl_current = request.security("NSE:BHARTIARTL", "5", close, lookahead=barmerge.lookahead_off)
+bhartiartl_ref = request.security("NSE:BHARTIARTL", "5", close[1], lookahead=barmerge.lookahead_off)
+lt_current = request.security("NSE:LT", "5", close, lookahead=barmerge.lookahead_off)
+lt_ref = request.security("NSE:LT", "5", close[1], lookahead=barmerge.lookahead_off)
+itc_current = request.security("NSE:ITC", "5", close, lookahead=barmerge.lookahead_off)
+itc_ref = request.security("NSE:ITC", "5", close[1], lookahead=barmerge.lookahead_off)
+tcs_current = request.security("NSE:TCS", "5", close, lookahead=barmerge.lookahead_off)
+tcs_ref = request.security("NSE:TCS", "5", close[1], lookahead=barmerge.lookahead_off)
+
+// Arrays for top 8 stocks
+session_current_prices = array.from(hdfcbank_current, icicibank_current, reliance_current, infy_current, bhartiartl_current, lt_current, itc_current, tcs_current)
+session_ref_prices = array.from(hdfcbank_ref, icicibank_ref, reliance_ref, infy_ref, bhartiartl_ref, lt_ref, itc_ref, tcs_ref)
+
+// Calculate current session bias
+calculate_current_bias() =>
+    temp_gainers_weight = 0.0
+    temp_losers_weight = 0.0
+    
+    for i = 0 to math.min(7, array.size(session_current_prices) - 1)
+        weight = array.get(top16_weights, i)
+        stock_current_price = array.get(session_current_prices, i)
+        stock_reference_price = array.get(session_ref_prices, i)
+        
+        change_pct = stock_reference_price != 0 and not na(stock_reference_price) and not na(stock_current_price) ? 
+                     ((stock_current_price - stock_reference_price) / stock_reference_price) * 100 : 0.0
+        
+        if change_pct > change_threshold_bias
+            temp_gainers_weight += weight
+        else if change_pct < -change_threshold_bias
+            temp_losers_weight += weight
+    
+    spread = temp_gainers_weight - temp_losers_weight
+    spread > 8 ? "BULL" : spread < -8 ? "BEAR" : "SIDEWAYS"
+
+// Historical bias tracking
+var array<string> historical_biases = array.new<string>()
+
+// Update bias history
+current_bias = calculate_current_bias()
+if barstate.isconfirmed
+    array.push(historical_biases, current_bias)
+    while array.size(historical_biases) > bias_analysis_bars
+        array.shift(historical_biases)
+
+// Determine final market bias
+get_final_market_bias() =>
+    if not enable_bias_filter
+        "NEUTRAL"
+    else
+        available_data = math.max(1, array.size(historical_biases))
+        bull_count = 0
+        bear_count = 0
+        sideways_count = 0
+        
+        for i = 0 to available_data - 1
+            if i < array.size(historical_biases)
+                bias = array.get(historical_biases, i)
+                if bias == "BULL"
+                    bull_count += 1
+                else if bias == "BEAR"
+                    bear_count += 1
+                else
+                    sideways_count += 1
+        
+        if available_data >= bias_analysis_bars
+            if bull_count >= bias_threshold
+                "BULL"
+            else if bear_count >= bias_threshold
+                "BEAR"
+            else if sideways_count >= sideways_threshold
+                "SIDEWAYS"
+            else
+                "SIDEWAYS"
+        else
+            current_bias
+
+final_market_bias = get_final_market_bias()
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+getCurrentTimestamp() =>
+    year_str = str.tostring(year(time))
+    month_str = str.tostring(month(time), "00")
+    day_str = str.tostring(dayofmonth(time), "00")
+    hour_str = str.tostring(hour(time), "00")
+    minute_str = str.tostring(minute(time), "00")
+    second_str = str.tostring(second(time), "00")
+    year_str + "-" + month_str + "-" + day_str + " " + hour_str + ":" + minute_str + ":" + second_str
+
+getTablePosition(pos) =>
+    switch pos
+        "top_left" => position.top_left
+        "top_center" => position.top_center
+        "top_right" => position.top_right
+        "middle_left" => position.middle_left
+        "middle_center" => position.middle_center
+        "middle_right" => position.middle_right
+        "bottom_left" => position.bottom_left
+        "bottom_center" => position.bottom_center
+        "bottom_right" => position.bottom_right
+        => position.bottom_right
+
+calculateWinRate(tpCount, slCount) =>
+    totalTrades = tpCount + slCount
+    totalTrades > 0 ? math.round((tpCount / totalTrades) * 100, 2) : 0.0
+
+getMonthNameWithYear(monthNum, yearNum) =>
+    month_name = switch monthNum
+        1 => "January"
+        2 => "February"
+        3 => "March"
+        4 => "April"
+        5 => "May"
+        6 => "June"
+        7 => "July"
+        8 => "August"
+        9 => "September"
+        10 => "October"
+        11 => "November"
+        12 => "December"
+        => "Unknown"
+    month_name + " " + str.tostring(yearNum)
+
+// Time restriction functions
+isAfter315PM() =>
+    if not enable_315_exit
+        false
+    else
+        t = time('1', 'GMT+5:30')
+        hour(t) > 15 or (hour(t) == 15 and minute(t) >= 15)
+
+isEntryBlocked() =>
+    isAfter315PM()
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// PROPER VWAP CALCULATION
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Check volume availability
+cumVolume = ta.cum(volume)
+if barstate.islast and cumVolume == 0
+    runtime.error("No volume is provided by the data vendor.")
+
+// Corporate events for VWAP anchoring
+new_earnings = request.earnings(syminfo.tickerid, earnings.actual, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+new_dividends = request.dividends(syminfo.tickerid, dividends.gross, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+new_split = request.splits(syminfo.tickerid, splits.denominator, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+
+// Determine new period for VWAP reset
+isNewPeriod = switch anchor
+	"Earnings"  => not na(new_earnings)
+	"Dividends" => not na(new_dividends)
+	"Splits"    => not na(new_split)
+	"Session"   => timeframe.change("D")
+	"Week"      => timeframe.change("W")
+	"Month"     => timeframe.change("M")
+	"Quarter"   => timeframe.change("3M")
+	"Year"      => timeframe.change("12M")
+	"Decade"    => timeframe.change("12M") and year % 10 == 0
+	"Century"   => timeframe.change("12M") and year % 100 == 0
+	=> false
+
+isEsdAnchor = anchor == "Earnings" or anchor == "Dividends" or anchor == "Splits"
+if na(vwap_source[1]) and not isEsdAnchor
+	isNewPeriod := true
+
+// Calculate proper VWAP
+float vwapValue = na
+if not (hideonDWM and timeframe.isdwm)
+    [_vwap, _stdevUpper, _] = ta.vwap(vwap_source, isNewPeriod, 1)
+	vwapValue := _vwap
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// CEYHUN ATR TRAILING STOP CALCULATION
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+SL1 = AF1 * ta.atr(AP1)
+Trail1 = 0.0
+iff_1 = SC > nz(Trail1[1], 0) ? SC - SL1 : SC + SL1
+iff_2 = SC < nz(Trail1[1], 0) and SC[1] < nz(Trail1[1], 0) ? math.min(nz(Trail1[1], 0), SC + SL1) : iff_1
+Trail1 := SC > nz(Trail1[1], 0) and SC[1] > nz(Trail1[1], 0) ? math.max(nz(Trail1[1], 0), SC - SL1) : iff_2
+
+SL2 = AF2 * ta.atr(AP2)
+Trail2 = 0.0
+iff_3 = SC > nz(Trail2[1], 0) ? SC - SL2 : SC + SL2
+iff_4 = SC < nz(Trail2[1], 0) and SC[1] < nz(Trail2[1], 0) ? math.min(nz(Trail2[1], 0), SC + SL2) : iff_3
+Trail2 := SC > nz(Trail2[1], 0) and SC[1] > nz(Trail2[1], 0) ? math.max(nz(Trail2[1], 0), SC - SL2) : iff_4
+
+// Bar color for trade signal
+Green = Trail1 > Trail2 and close > Trail2 and low > Trail2
+Blue = Trail1 > Trail2 and close > Trail2 and low < Trail2
+Red = Trail2 > Trail1 and close < Trail2 and high < Trail2
+Yellow = Trail2 > Trail1 and close < Trail2 and high > Trail2
+
+// Signals
+Bull = ta.barssince(Green) < ta.barssince(Red)
+Bear = ta.barssince(Red) < ta.barssince(Green)
+
+Buy_ATR = ta.crossover(Trail1, Trail2)
+Sell_ATR = ta.crossunder(Trail1, Trail2)
+iff_5 = Trail2 > Trail1 ? -1 : 0
+SR = Trail1 > Trail2 ? 1 : iff_5
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// TRADE STATE VARIABLES
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Trade state variables
+var bool in_trade = false
+var string trade_type = ""
+var float entry_price = na  // This will be NORMAL CANDLE price
+var float entry_price_ha = na  // Store HA entry for reference
+var float stop_loss = na
+var int entry_bar_index = na
+
+// Trade exit flags
+var bool tp_hit_alert = false
+var bool sl_hit_alert = false
+var bool auto_tp_hit_alert = false
+var bool exit_315 = false
+var float trade_points_tp = 0.0
+var float trade_points_sl = 0.0
+
+// Overlap prevention tracking
+var int blocked_signals_count = 0
+var bool signal_blocked_this_bar = false
+
+// Bias filter tracking
+var int bias_blocked_signals_count = 0
+var bool bias_blocked_this_bar = false
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// VWAP CROSSOVER DETECTION WITH OVERLAP PREVENTION
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Previous candle closure states
+prev_candle_above_vwap = close[1] > vwapValue[1]
+prev_candle_below_vwap = close[1] < vwapValue[1]
+
+// Current candle closure states  
+current_candle_above_vwap = close > vwapValue
+current_candle_below_vwap = close < vwapValue
+
+// Complete candle closure requirements
+complete_candle_above = low > vwapValue
+complete_candle_below = high < vwapValue
+
+// Base VWAP Crossover Detection (without overlap prevention)
+vwap_cross_above_base = if crossover_mode == "Complete Candle"
+    complete_candle_above and current_candle_above_vwap
+else
+    prev_candle_below_vwap and complete_candle_above
+
+vwap_cross_below_base = if crossover_mode == "Complete Candle"
+    complete_candle_below and current_candle_below_vwap
+else
+    prev_candle_above_vwap and complete_candle_below
+
+// OVERLAP PREVENTION LOGIC
+overlap_condition = enable_overlap_prevention and in_trade
+
+// Final VWAP crossover signals with overlap prevention
+vwap_cross_above = vwap_cross_above_base and not overlap_condition
+vwap_cross_below = vwap_cross_below_base and not overlap_condition
+
+// Track blocked signals for debugging
+signal_blocked_this_bar := (vwap_cross_above_base or vwap_cross_below_base) and overlap_condition
+if signal_blocked_this_bar
+    blocked_signals_count := blocked_signals_count + 1
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ADX CALCULATION
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+smoothing_rma(src, length) =>
+    alpha = 2.0 / (length + 1)
+    var float rma_val = na
+    rma_val := na(rma_val[1]) ? src : alpha * src + (1 - alpha) * rma_val[1]
+    rma_val
+
+dirmov_v5(len) =>
+    up = math.max(high - high[1], 0)
+    down = math.max(low[1] - low, 0)
+    plusDM = up > down and up > 0 ? up : 0
+    minusDM = down > up and down > 0 ? down : 0
+    
+    truerange = math.max(high - low, math.max(math.abs(high - close[1]), math.abs(low - close[1])))
+    truerange_smooth = smoothing_rma(truerange, len)
+    
+    plus = truerange_smooth > 0 ? 100 * smoothing_rma(plusDM, len) / truerange_smooth : 0
+    minus = truerange_smooth > 0 ? 100 * smoothing_rma(minusDM, len) / truerange_smooth : 0
+    [plus, minus]
+
+adx_v5(dilen) =>
+    [plus, minus] = dirmov_v5(dilen)
+    sum = plus + minus
+    adx_value = sum > 0 ? 100 * smoothing_rma(math.abs(plus - minus) / sum, dilen) : 0
+    adx_value
+
+adx_value = adx_v5(adx_length)
+adx_condition = not enable_adx_filter or adx_value >= adx_threshold
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// VOLUME FILTER
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+ema_v5(src, length) =>
+    alpha = 2.0 / (length + 1)
+    var float ema_val = na
+    ema_val := na(ema_val[1]) ? src : alpha * src + (1 - alpha) * ema_val[1]
+    ema_val
+
+volume_ema = ema_v5(volume, volume_ema_length)
+volume_condition = not enable_volume_filter or volume > (volume_ema * volume_multiplier)
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// MARKET BIAS FILTER CONDITIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+bias_allows_buy = final_market_bias == "BULL" or final_market_bias == "NEUTRAL"
+bias_allows_sell = final_market_bias == "BEAR" or final_market_bias == "NEUTRAL"
+
+bias_blocked_buy = vwap_cross_above and not bias_allows_buy
+bias_blocked_sell = vwap_cross_below and not bias_allows_sell
+bias_blocked_this_bar := bias_blocked_buy or bias_blocked_sell
+
+if bias_blocked_this_bar
+    bias_blocked_signals_count := bias_blocked_signals_count + 1
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// SIGNAL GENERATION WITH ALL FILTERS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+vwap_buy_signal = vwap_cross_above and adx_condition and volume_condition and bias_allows_buy and enable_vwap_strategy and not isEntryBlocked()
+vwap_sell_signal = vwap_cross_below and adx_condition and volume_condition and bias_allows_sell and enable_vwap_strategy and not isEntryBlocked()
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// TRADE MANAGEMENT WITH NORMAL CANDLE PRICES
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Entry Logic - USE NORMAL CANDLE PRICE FOR ENTRY
+if vwap_buy_signal and not in_trade
+    in_trade := true
+    trade_type := "BUY"
+    entry_price := normal_close  // USE NORMAL CANDLE CLOSE
+    entry_price_ha := close  // Store HA price for reference
+    stop_loss := Trail2
+    entry_bar_index := bar_index
+
+if vwap_sell_signal and not in_trade
+    in_trade := true
+    trade_type := "SELL"
+    entry_price := normal_close  // USE NORMAL CANDLE CLOSE
+    entry_price_ha := close  // Store HA price for reference
+    stop_loss := Trail2
+    entry_bar_index := bar_index
+
+// Update trailing stop using Ceyhun's logic
+if in_trade
+    if trade_type == "BUY"
+        if Trail2 > entry_price
+            stop_loss := Trail2
+    else if trade_type == "SELL"
+        if Trail2 < entry_price
+            stop_loss := Trail2
+
+// 3:15 PM Auto Exit - USE NORMAL CANDLE PRICE
+if in_trade and isAfter315PM()
+    exit_315 := true
+    in_trade := false
+    trade_points_tp := trade_type == "BUY" ? normal_close - entry_price : entry_price - normal_close
+
+// Exit Logic with Ceyhun ATR trailing - USE NORMAL CANDLE PRICE
+if in_trade and bar_index > entry_bar_index and not exit_315
+    
+    // Auto TP at 3:15 PM
+    if auto_tp_time and hour(time) == 15 and minute(time) == 15
+        auto_tp_hit_alert := true
+        in_trade := false
+        trade_points_tp := trade_type == "BUY" ? normal_close - entry_price : entry_price - normal_close
+    
+    // Ceyhun ATR Exit Logic
+    else
+        if trade_type == "BUY"
+            if Sell_ATR or ta.crossunder(Trail1, Trail2)
+                if normal_close > entry_price  // USE NORMAL CANDLE
+                    tp_hit_alert := true
+                    in_trade := false
+                    trade_points_tp := normal_close - entry_price
+                else
+                    sl_hit_alert := true
+                    in_trade := false
+                    trade_points_sl := entry_price - normal_close
+        else if trade_type == "SELL"
+            if Buy_ATR or ta.crossover(Trail1, Trail2)
+                if normal_close < entry_price  // USE NORMAL CANDLE
+                    tp_hit_alert := true
+                    in_trade := false
+                    trade_points_tp := entry_price - normal_close
+                else
+                    sl_hit_alert := true
+                    in_trade := false
+                    trade_points_sl := normal_close - entry_price
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// PERFORMANCE TRACKING - NOW BASED ON NORMAL CANDLES
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+var trade_months = array.new<int>()
+var trade_years = array.new<int>()
+var trade_was_tp = array.new<bool>()
+var trade_points = array.new<float>()
+
+var int total_tp_count = 0
+var int total_sl_count = 0
+var float total_tp_points = 0.0
+var float total_sl_points = 0.0
+
+var int current_sl_streak = 0
+var int max_sl_streak = 0
+var float current_sl_streak_points = 0.0
+var float max_sl_streak_points = 0.0
+
+// Performance Updates - ALL CALCULATIONS NOW USE NORMAL CANDLE PRICES
+if tp_hit_alert or auto_tp_hit_alert or exit_315
+    points_to_add = exit_315 ? math.abs(trade_points_tp) : math.abs(trade_points_tp)
+    is_tp = exit_315 ? (trade_points_tp > 0) : true
+    
+    array.push(trade_months, month(time))
+    array.push(trade_years, year(time))
+    array.push(trade_was_tp, is_tp)
+    array.push(trade_points, points_to_add)
+    
+    if is_tp
+        total_tp_count += 1
+        total_tp_points += points_to_add
+        current_sl_streak := 0
+        current_sl_streak_points := 0.0
+    else
+        total_sl_count += 1
+        total_sl_points += points_to_add
+        current_sl_streak += 1
+        current_sl_streak_points += points_to_add
+        if current_sl_streak > max_sl_streak
+            max_sl_streak := current_sl_streak
+            max_sl_streak_points := current_sl_streak_points
+
+if sl_hit_alert
+    array.push(trade_months, month(time))
+    array.push(trade_years, year(time))
+    array.push(trade_was_tp, false)
+    array.push(trade_points, math.abs(trade_points_sl))
+    
+    total_sl_count += 1
+    total_sl_points += math.abs(trade_points_sl)
+    current_sl_streak += 1
+    current_sl_streak_points += math.abs(trade_points_sl)
+    if current_sl_streak > max_sl_streak
+        max_sl_streak := current_sl_streak
+        max_sl_streak_points := current_sl_streak_points
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// PERFORMANCE TABLE
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+if barstate.islast and show_performance_table
+    current_month = month(time)
+    current_year = year(time)
+    
+    var performanceTable = table.new(getTablePosition(table_position), 14, 15, bgcolor=color.new(color.black, 20), border_width=1)
+    
+    // Header row
+    table.cell(performanceTable, 0, 0, 'Month & Year', text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    table.cell(performanceTable, 1, 0, 'TP Trades', text_color=color.white, text_size=size.small, bgcolor=color.new(color.green, 60))
+    table.cell(performanceTable, 2, 0, 'SL Trades', text_color=color.white, text_size=size.small, bgcolor=color.new(color.red, 60))
+    table.cell(performanceTable, 3, 0, 'TP Points', text_color=color.white, text_size=size.small, bgcolor=color.new(color.lime, 60))
+    table.cell(performanceTable, 4, 0, 'SL Points', text_color=color.white, text_size=size.small, bgcolor=color.new(color.maroon, 60))
+    table.cell(performanceTable, 5, 0, 'Net Points', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 6, 0, 'Win Rate %', text_color=color.white, text_size=size.small, bgcolor=color.new(color.teal, 60))
+    table.cell(performanceTable, 7, 0, 'Profit Factor', text_color=color.white, text_size=size.small, bgcolor=color.new(color.aqua, 60))
+    table.cell(performanceTable, 8, 0, 'PNL (₹)', text_color=color.white, text_size=size.small, bgcolor=color.new(color.yellow, 60))
+    table.cell(performanceTable, 9, 0, 'Max SL Streak', text_color=color.white, text_size=size.small, bgcolor=color.new(color.red, 80))
+    table.cell(performanceTable, 10, 0, 'SL Streak Pts', text_color=color.white, text_size=size.small, bgcolor=color.new(color.maroon, 80))
+    table.cell(performanceTable, 11, 0, 'VWAP Trade', text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    table.cell(performanceTable, 12, 0, 'ADX Filter', text_color=color.white, text_size=size.small, bgcolor=color.new(color.lime, 60))
+    table.cell(performanceTable, 13, 0, 'Vol Filter', text_color=color.white, text_size=size.small, bgcolor=color.new(color.orange, 60))
+    
+    grand_tp_trades = 0
+    grand_sl_trades = 0
+    grand_tp_points = 0.0
+    grand_sl_points = 0.0
+    
+    // Display last 12 months
+    for i = 0 to 11
+        row = i + 1
+        
+        target_month = ((current_month - 12 + i) % 12)
+        if target_month <= 0
+            target_month := target_month + 12
+        
+        target_year = target_month > current_month ? current_year - 1 : current_year
+        
+        month_tp_trades = 0
+        month_sl_trades = 0
+        month_tp_points = 0.0
+        month_sl_points = 0.0
+        
+        if array.size(trade_months) > 0
+            for j = 0 to array.size(trade_months) - 1
+                trade_month = array.get(trade_months, j)
+                trade_year = array.get(trade_years, j)
+                
+                if trade_month == target_month and trade_year == target_year
+                    was_tp = array.get(trade_was_tp, j)
+                    points = array.get(trade_points, j)
+                    
+                    if was_tp
+                        month_tp_trades := month_tp_trades + 1
+                        month_tp_points := month_tp_points + points
+                    else
+                        month_sl_trades := month_sl_trades + 1
+                        month_sl_points := month_sl_points + points
+        
+        net_pts = month_tp_points - month_sl_points
+        win_rate = calculateWinRate(month_tp_trades, month_sl_trades)
+        profit_factor = month_sl_points > 0 ? math.round(month_tp_points / month_sl_points, 2) : (month_tp_points > 0 ? 999.99 : 0.0)
+        option_pts = math.round(net_pts * 0.55)
+        pnl = math.round(option_pts * 120)
+        
+        grand_tp_trades := grand_tp_trades + month_tp_trades
+        grand_sl_trades := grand_sl_trades + month_sl_trades
+        grand_tp_points := grand_tp_points + month_tp_points
+        grand_sl_points := grand_sl_points + month_sl_points
+        
+        month_name_with_year = getMonthNameWithYear(target_month, target_year)
+        
+        table.cell(performanceTable, 0, row, month_name_with_year, text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 1, row, str.tostring(month_tp_trades), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 2, row, str.tostring(month_sl_trades), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 3, row, str.tostring(math.round(month_tp_points)), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 4, row, str.tostring(math.round(month_sl_points)), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 5, row, str.tostring(math.round(net_pts)), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 6, row, str.tostring(win_rate) + "%", text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 7, row, str.tostring(profit_factor), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 8, row, str.tostring(pnl), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 9, row, str.tostring(0), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 10, row, str.tostring(0), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 11, row, str.tostring(month_tp_trades + month_sl_trades), text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 12, row, enable_adx_filter ? "ON" : "OFF", text_color=color.white, text_size=size.small)
+        table.cell(performanceTable, 13, row, enable_volume_filter ? "ON" : "OFF", text_color=color.white, text_size=size.small)
+    
+    // Total row
+    grand_net_pts = grand_tp_points - grand_sl_points
+    grand_win_rate = calculateWinRate(grand_tp_trades, grand_sl_trades)
+    grand_profit_factor = grand_sl_points > 0 ? math.round(grand_tp_points / grand_sl_points, 2) : (grand_tp_points > 0 ? 999.99 : 0.0)
+    grand_option_pts = math.round(grand_net_pts * 0.55)
+    grand_pnl = math.round(grand_option_pts * 120)
+    
+    table.cell(performanceTable, 0, 13, 'TOTAL', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 1, 13, str.tostring(grand_tp_trades), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 2, 13, str.tostring(grand_sl_trades), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 3, 13, str.tostring(math.round(grand_tp_points)), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 4, 13, str.tostring(math.round(grand_sl_points)), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 5, 13, str.tostring(math.round(grand_net_pts)), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 6, 13, str.tostring(grand_win_rate) + "%", text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 7, 13, str.tostring(grand_profit_factor), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 8, 13, str.tostring(grand_pnl), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 9, 13, str.tostring(max_sl_streak), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 10, 13, str.tostring(math.round(max_sl_streak_points)), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 11, 13, str.tostring(total_tp_count + total_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 12, 13, enable_adx_filter ? "ENABLED" : "DISABLED", text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 13, 13, enable_volume_filter ? "ENABLED" : "DISABLED", text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    
+    // Strategy Summary Row
+    table.cell(performanceTable, 0, 14, 'NORMAL-CANDLES', text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 60))
+    table.cell(performanceTable, 1, 14, 'TP: ' + str.tostring(total_tp_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.green, 60))
+    table.cell(performanceTable, 2, 14, 'SL: ' + str.tostring(total_sl_count), text_color=color.white, text_size=size.small, bgcolor=color.new(color.red, 60))
+    table.cell(performanceTable, 3, 14, 'F-ATR: ' + str.tostring(AP1) + "(" + str.tostring(AF1) + ")", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    table.cell(performanceTable, 4, 14, 'S-ATR: ' + str.tostring(AP2) + "(" + str.tostring(AF2) + ")", text_color=color.white, text_size=size.small, bgcolor=color.new(color.orange, 60))
+    
+    vwap_status = enable_vwap_strategy ? "ON" : "OFF"
+    adx_status = enable_adx_filter ? "ON" : "OFF"
+    vol_status = enable_volume_filter ? "ON" : "OFF"
+    
+    table.cell(performanceTable, 5, 14, vwap_status, text_color=color.white, text_size=size.small, bgcolor=enable_vwap_strategy ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 6, 14, adx_status, text_color=color.white, text_size=size.small, bgcolor=enable_adx_filter ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 7, 14, vol_status, text_color=color.white, text_size=size.small, bgcolor=enable_volume_filter ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 9, 14, user_login, text_color=color.white, text_size=size.small, bgcolor=color.new(color.navy, 60))
+    table.cell(performanceTable, 10, 14, '3:15 EXIT', text_color=color.white, text_size=size.small, bgcolor=enable_315_exit ? color.new(color.green, 60) : color.new(color.red, 60))
+    table.cell(performanceTable, 11, 14, 'NO-OVERLAP', text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+    table.cell(performanceTable, 12, 14, 'CEYHUN-ATR', text_color=color.white, text_size=size.small, bgcolor=color.new(color.lime, 60))
+    table.cell(performanceTable, 13, 14, 'BIAS-FILTER', text_color=color.white, text_size=size.small, bgcolor=enable_bias_filter ? color.new(color.green, 60) : color.new(color.red, 60))
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ENHANCED STATUS TABLE
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+var statusTable = table.new(position.top_right, 2, 24, bgcolor=color.new(color.black, 20), border_width=2)
+if barstate.islast
+    table.cell(statusTable, 0, 0, "Parameter", text_color=color.white, bgcolor=color.new(color.blue, 60))
+    table.cell(statusTable, 1, 0, "Value", text_color=color.white, bgcolor=color.new(color.blue, 60))
+    
+    // Chart Type Indicator
+    table.cell(statusTable, 0, 1, "Chart Type", text_color=color.white, bgcolor=color.new(color.yellow, 60))
+    chart_type = is_heikin_ashi ? "Heikin Ashi" : "Normal"
+    table.cell(statusTable, 1, 1, chart_type, text_color=color.white, bgcolor=is_heikin_ashi ? color.new(color.orange, 40) : color.new(color.green, 40))
+    
+    // Performance Calculation Mode
+    table.cell(statusTable, 0, 2, "Performance Mode", text_color=color.white, bgcolor=color.new(color.lime, 60))
+    table.cell(statusTable, 1, 2, "NORMAL CANDLES", text_color=color.white, bgcolor=color.new(color.green, 40))
+    
+    // Active trade status
+    active_trade_text = in_trade ? "VWAP:" + trade_type : "NONE"
+    table.cell(statusTable, 0, 3, "Active Trade", text_color=color.white, bgcolor=color.new(color.green, 40))
+    table.cell(statusTable, 1, 3, active_trade_text, text_color=color.white, bgcolor=color.new(color.green, 40))
+    
+    // Entry Price Comparison (if in trade)
+    if in_trade
+        table.cell(statusTable, 0, 4, "Entry (Normal)", text_color=color.white, bgcolor=color.new(color.aqua, 40))
+        table.cell(statusTable, 1, 4, str.tostring(entry_price, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+        
+        table.cell(statusTable, 0, 5, "Entry (HA)", text_color=color.white, bgcolor=color.new(color.aqua, 40))
+        table.cell(statusTable, 1, 5, str.tostring(entry_price_ha, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+        
+        table.cell(statusTable, 0, 6, "Current (Normal)", text_color=color.white, bgcolor=color.new(color.aqua, 40))
+        table.cell(statusTable, 1, 6, str.tostring(normal_close, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+        
+        table.cell(statusTable, 0, 7, "P&L (Normal)", text_color=color.white, bgcolor=color.new(color.yellow, 40))
+        current_pnl = trade_type == "BUY" ? normal_close - entry_price : entry_price - normal_close
+        pnl_color = current_pnl > 0 ? color.new(color.green, 40) : color.new(color.red, 40)
+        table.cell(statusTable, 1, 7, str.tostring(current_pnl, "#.##"), text_color=color.white, bgcolor=pnl_color)
+    
+    // Strategy status
+    row_offset = in_trade ? 8 : 4
+    table.cell(statusTable, 0, row_offset, "VWAP Strategy", text_color=color.white, bgcolor=color.new(color.blue, 40))
+    vwap_status = enable_vwap_strategy ? "ON" : "OFF"
+    table.cell(statusTable, 1, row_offset, vwap_status, text_color=color.white, bgcolor=enable_vwap_strategy ? color.new(color.green, 40) : color.new(color.red, 40))
+    
+    // Overlap Prevention Status
+    table.cell(statusTable, 0, row_offset + 1, "Overlap Prevention", text_color=color.white, bgcolor=color.new(color.purple, 40))
+    overlap_status = enable_overlap_prevention ? "ON" : "OFF"
+    table.cell(statusTable, 1, row_offset + 1, overlap_status, text_color=color.white, bgcolor=enable_overlap_prevention ? color.new(color.green, 40) : color.new(color.red, 40))
+    
+    // Crossover Mode
+    table.cell(statusTable, 0, row_offset + 2, "Entry Logic", text_color=color.white, bgcolor=color.new(color.purple, 40))
+    table.cell(statusTable, 1, row_offset + 2, crossover_mode, text_color=color.white, bgcolor=color.new(color.gray, 40))
+    
+    // CEYHUN ATR SECTION
+    table.cell(statusTable, 0, row_offset + 3, "=== CEYHUN ATR ===", text_color=color.white, bgcolor=color.new(color.yellow, 60))
+    table.cell(statusTable, 1, row_offset + 3, "SETTINGS", text_color=color.white, bgcolor=color.new(color.yellow, 60))
+    
+    // Fast ATR Settings
+    table.cell(statusTable, 0, row_offset + 4, "Fast ATR", text_color=color.white, bgcolor=color.new(color.lime, 40))
+    fast_atr_text = str.tostring(AP1) + "(" + str.tostring(AF1) + ")"
+    table.cell(statusTable, 1, row_offset + 4, fast_atr_text, text_color=color.white, bgcolor=color.new(color.gray, 40))
+    
+    // Slow ATR Settings
+    table.cell(statusTable, 0, row_offset + 5, "Slow ATR", text_color=color.white, bgcolor=color.new(color.orange, 40))
+    slow_atr_text = str.tostring(AP2) + "(" + str.tostring(AF2) + ")"
+    table.cell(statusTable, 1, row_offset + 5, slow_atr_text, text_color=color.white, bgcolor=color.new(color.gray, 40))
+    
+    // ATR Trail Values
+    table.cell(statusTable, 0, row_offset + 6, "Fast Trail", text_color=color.white, bgcolor=color.new(color.aqua, 40))
+    table.cell(statusTable, 1, row_offset + 6, str.tostring(Trail1, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+    
+    table.cell(statusTable, 0, row_offset + 7, "Slow Trail", text_color=color.white, bgcolor=color.new(color.aqua, 40))
+    table.cell(statusTable, 1, row_offset + 7, str.tostring(Trail2, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 40))
+    
+    // ATR Signals
+    table.cell(statusTable, 0, row_offset + 8, "ATR Bull/Bear", text_color=color.white, bgcolor=color.new(color.lime, 40))
+    atr_trend = SR == 1 ? "BULL" : SR == -1 ? "BEAR" : "NEUTRAL"
+    table.cell(statusTable, 1, row_offset + 8, atr_trend, text_color=color.white, bgcolor=SR == 1 ? color.new(color.green, 40) : SR == -1 ? color.new(color.red, 40) : color.new(color.gray, 40))
+    
+    // ADX Filter status
+    table.cell(statusTable, 0, row_offset + 9, "ADX Filter", text_color=color.white, bgcolor=color.new(color.purple, 40))
+    adx_status = enable_adx_filter ? "ON (" + str.tostring(adx_threshold) + ")" : "OFF"
+    table.cell(statusTable, 1, row_offset + 9, adx_status, text_color=color.white, bgcolor=enable_adx_filter ? color.new(color.green, 40) : color.new(color.red, 40))
+    
+    // Volume Filter status
+    table.cell(statusTable, 0, row_offset + 10, "Volume Filter", text_color=color.white, bgcolor=color.new(color.orange, 40))
+    vol_status = enable_volume_filter ? "ON (" + str.tostring(volume_multiplier) + "x)" : "OFF"
+    table.cell(statusTable, 1, row_offset + 10, vol_status, text_color=color.white, bgcolor=enable_volume_filter ? color.new(color.green, 40) : color.new(color.red, 40))
+    
+    // User
+    table.cell(statusTable, 0, row_offset + 11, "User", text_color=color.white, bgcolor=color.new(color.navy, 40))
+    table.cell(statusTable, 1, row_offset + 11, user_login, text_color=color.white, bgcolor=color.new(color.gray, 40))
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// VISUAL PLOTTING
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// Plot VWAP
+plot(show_vwap_line ? vwapValue : na, title="VWAP", color=#2962FF, linewidth=2)
+
+// Plot Normal Candle Close Line (for reference)
+plot(show_normal_candles ? normal_close : na, title="Normal Candle Close", color=color.new(color.yellow, 0), linewidth=2, style=plot.style_line)
+
+// Plot Ceyhun ATR Trailing Lines
+TS1 = plot(show_trail_lines ? Trail1 : na, 'Fast Trail', style=plot.style_line, color=Trail1 > Trail2 ? color.blue : color.yellow, linewidth=2)
+TS2 = plot(show_trail_lines ? Trail2 : na, 'Slow Trail', style=plot.style_line, color=Trail1 > Trail2 ? color.green : color.red, linewidth=2)
+fill(TS1, TS2, Bull ? color.new(color.green, 90) : color.new(color.red, 90))
+
+// Plot active stop loss level when in trade
+plot(in_trade ? stop_loss : na, title="Active Stop Loss", color=color.red, linewidth=2, style=plot.style_linebr)
+
+// Plot entry signals
+plotshape(vwap_buy_signal, title='VWAP Buy Signal', style=shape.labelup, location=location.belowbar, color=color.green, text='VWAP\nBUY', textcolor=color.white, size=size.small)
+plotshape(vwap_sell_signal, title='VWAP Sell Signal', style=shape.labeldown, location=location.abovebar, color=color.red, text='VWAP\nSELL', textcolor=color.white, size=size.small)
+
+// Plot blocked signals
+plotshape(signal_blocked_this_bar, title='Blocked Signal', style=shape.xcross, location=location.top, color=color.orange, text='BLOCKED', textcolor=color.white, size=size.tiny)
+
+// Exit labels - NOW SHOWING NORMAL CANDLE PERFORMANCE
+atr_value = ta.atr(20) * 2
+
+if tp_hit_alert or auto_tp_hit_alert
+    actual_tp_points = math.abs(trade_points_tp)
+    label_y = trade_type == "BUY" ? high + atr_value : low - atr_value
+    label_style = trade_type == "BUY" ? label.style_label_down : label.style_label_up
+    label_text = auto_tp_hit_alert ? "🕒 VWAP AUTO TP +" : "✅ VWAP TP +"
+    
+    label.new(x=bar_index, y=label_y, text=label_text + str.tostring(math.round(actual_tp_points, 1)) + " pts (NC)", 
+              style=label_style, color=color.new(color.green, 0), textcolor=color.white, size=size.small)
+
+if sl_hit_alert
+    actual_sl_points = math.abs(trade_points_sl)
+    label_y = trade_type == "BUY" ? low - atr_value : high + atr_value
+    label_style = trade_type == "BUY" ? label.style_label_up : label.style_label_down
+    
+    label.new(x=bar_index, y=label_y, text="❌ VWAP SL -" + str.tostring(math.round(actual_sl_points, 1)) + " pts (NC)", 
+              style=label_style, color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+
+if exit_315
+    actual_315_points = math.abs(trade_points_tp)
+    label_y = trade_type == "BUY" ? high + atr_value : low - atr_value
+    label_style = trade_type == "BUY" ? label.style_label_down : label.style_label_up
+    label_text = trade_points_tp > 0 ? "🕒 VWAP 3:15 TP +" : "🕒 VWAP 3:15 SL -"
+    
+    label.new(x=bar_index, y=label_y, text=label_text + str.tostring(math.round(actual_315_points, 1)) + " pts (NC)", 
+              style=label_style, color=color.new(color.orange, 0), textcolor=color.white, size=size.small)
+
+// Entry labels showing both prices
+if vwap_buy_signal
+    label.new(x=bar_index, y=low - atr_value * 0.5, 
+              text="📊 Entry NC:" + str.tostring(normal_close, "#.##") + "\nHA:" + str.tostring(close, "#.##"), 
+              style=label.style_label_up, color=color.new(color.blue, 20), textcolor=color.white, size=size.tiny)
+
+if vwap_sell_signal
+    label.new(x=bar_index, y=high + atr_value * 0.5, 
+              text="📊 Entry NC:" + str.tostring(normal_close, "#.##") + "\nHA:" + str.tostring(close, "#.##"), 
+              style=label.style_label_down, color=color.new(color.purple, 20), textcolor=color.white, size=size.tiny)
+
+// Background highlighting with Ceyhun bar colors
+bcl = Green ? color.lime : Blue ? color.blue : Yellow ? color.yellow : Red ? color.red : color.white
+barcolor(in_trade ? (trade_type == "BUY" ? color.new(color.green, 70) : color.new(color.red, 70)) : bcl)
+
+bgcolor(in_trade and trade_type == "BUY" ? color.new(color.green, 95) : in_trade and trade_type == "SELL" ? color.new(color.red, 95) : na, title="Active Trade Background")
+bgcolor(complete_candle_above and not in_trade ? color.new(color.green, 90) : na, title="Complete Candle Above VWAP")
+bgcolor(complete_candle_below and not in_trade ? color.new(color.red, 90) : na, title="Complete Candle Below VWAP")
+bgcolor(signal_blocked_this_bar ? color.new(color.orange, 85) : na, title="Signal Blocked by Overlap Prevention")
+bgcolor(isEntryBlocked() ? color.new(color.gray, 90) : na, title="Entries Blocked After 3:15 PM")
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// DEBUG LABELS (OPTIONAL) - NOW SHOWING NORMAL CANDLE INFO
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+if show_debug_labels and (bar_index % 10 == 0)
+    price_diff = normal_close - close
+    debug_text = "InTrade:" + str.tostring(in_trade) + 
+                 "\nBase:" + str.tostring(vwap_cross_above_base or vwap_cross_below_base) +
+                 "\nFinal:" + str.tostring(vwap_buy_signal or vwap_sell_signal) +
+                 "\nBlocked:" + str.tostring(blocked_signals_count) +
+                 "\nATR:" + str.tostring(SR) +
+                 "\nNC:" + str.tostring(normal_close, "#.##") +
+                 "\nHA:" + str.tostring(close, "#.##") +
+                 "\nDiff:" + str.tostring(price_diff, "#.##")
+    
+    label.new(bar_index, high + ta.atr(20), debug_text, style=label.style_label_down, 
+              color=color.yellow, textcolor=color.black, size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ENHANCED ALERTS WITH NORMAL CANDLE INFO
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+if enable_alerts
+    if vwap_buy_signal
+        adx_info = enable_adx_filter ? " | ADX: " + str.tostring(math.round(adx_value, 2)) + " (>" + str.tostring(adx_threshold) + ")" : ""
+        vol_info = enable_volume_filter ? " | Vol: " + str.tostring(math.round(volume/volume_ema, 2)) + "x EMA" : ""
+        atr_info = " | Fast ATR: " + str.tostring(Trail1, "#.##") + " | Slow ATR: " + str.tostring(Trail2, "#.##")
+        mode_info = " | Mode: " + crossover_mode + " | Overlap Prevention: " + (enable_overlap_prevention ? "ON" : "OFF")
+        price_info = " | Normal Close: " + str.tostring(normal_close, "#.##") + " | HA Close: " + str.tostring(close, "#.##")
+        alert("VWAP BUY SIGNAL: Entry at NORMAL CANDLE " + str.tostring(normal_close, "#.##") + price_info + atr_info + adx_info + vol_info + mode_info + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if vwap_sell_signal
+        adx_info = enable_adx_filter ? " | ADX: " + str.tostring(math.round(adx_value, 2)) + " (>" + str.tostring(adx_threshold) + ")" : ""
+        vol_info = enable_volume_filter ? " | Vol: " + str.tostring(math.round(volume/volume_ema, 2)) + "x EMA" : ""
+        atr_info = " | Fast ATR: " + str.tostring(Trail1, "#.##") + " | Slow ATR: " + str.tostring(Trail2, "#.##")
+        mode_info = " | Mode: " + crossover_mode + " | Overlap Prevention: " + (enable_overlap_prevention ? "ON" : "OFF")
+        price_info = " | Normal Close: " + str.tostring(normal_close, "#.##") + " | HA Close: " + str.tostring(close, "#.##")
+        alert("VWAP SELL SIGNAL: Entry at NORMAL CANDLE " + str.tostring(normal_close, "#.##") + price_info + atr_info + adx_info + vol_info + mode_info + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if tp_hit_alert or auto_tp_hit_alert
+        alert("VWAP TAKE PROFIT (Normal Candle): Position closed with profit at " + str.tostring(normal_close, "#.##") + " | Points: +" + str.tostring(math.abs(trade_points_tp), "#.##") + " | Entry was: " + str.tostring(entry_price, "#.##") + " | New signals now allowed | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if sl_hit_alert
+        alert("VWAP STOP LOSS (Normal Candle): Position closed with loss at " + str.tostring(normal_close, "#.##") + " | Points: -" + str.tostring(math.abs(trade_points_sl), "#.##") + " | Entry was: " + str.tostring(entry_price, "#.##") + " | New signals now allowed | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+    
+    if exit_315
+        result_msg = trade_points_tp > 0 ? "profit" : "loss"
+        alert("VWAP 3:15 PM AUTO EXIT (Normal Candle): " + str.tostring(math.abs(trade_points_tp), "#.##") + " points " + result_msg + " at " + str.tostring(normal_close, "#.##") + " | Entry was: " + str.tostring(entry_price, "#.##") + " | New signals now allowed | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
+// Overlap Prevention Alert
+if signal_blocked_this_bar and enable_alerts
+    alert("SIGNAL BLOCKED: VWAP signal detected but blocked due to active trade (" + trade_type + ") | Blocked count: " + str.tostring(blocked_signals_count) + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
+// Entry Blocking Alert
+if isEntryBlocked() and (vwap_cross_above or vwap_cross_below)
+    alert("ENTRY BLOCKED: No new VWAP entries allowed after 3:15 PM | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
+// Bias Filter Alert
+if bias_blocked_this_bar and enable_alerts
+    blocked_direction = bias_blocked_buy ? "BUY" : "SELL"
+    alert("SIGNAL BLOCKED BY BIAS FILTER: " + blocked_direction + " signal blocked | Current Bias: " + final_market_bias + " | Time: " + getCurrentTimestamp(), alert.freq_once_per_bar)
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ALERT CONDITIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+alertcondition(vwap_buy_signal, 'VWAP Buy Signal (NC)', 'VWAP Buy Signal Triggered - Performance on Normal Candles')
+alertcondition(vwap_sell_signal, 'VWAP Sell Signal (NC)', 'VWAP Sell Signal Triggered - Performance on Normal Candles')
+alertcondition(tp_hit_alert or auto_tp_hit_alert, 'VWAP Take Profit (NC)', 'VWAP Take Profit Hit - Calculated on Normal Candles')
+alertcondition(sl_hit_alert, 'VWAP Stop Loss (NC)', 'VWAP Stop Loss Hit - Calculated on Normal Candles')
+alertcondition(signal_blocked_this_bar, 'Signal Blocked by Overlap', 'VWAP Signal Blocked Due to Active Trade')
+alertcondition(bias_blocked_this_bar, 'Signal Blocked by Bias Filter', 'VWAP Signal Blocked by Market Bias Filter')
+alertcondition(isEntryBlocked() and (vwap_cross_above or vwap_cross_below), 'Entry Blocked After 3:15 PM', 'VWAP Entry Attempted After 3:15 PM')
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// RESET FLAGS AFTER PROCESSING
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+if tp_hit_alert
+    tp_hit_alert := false
+if sl_hit_alert
+    sl_hit_alert := false
+if auto_tp_hit_alert
+    auto_tp_hit_alert := false
+if exit_315
+    exit_315 := false
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// INFO PANEL - SHOW NORMAL VS HEIKIN ASHI PRICE DIFFERENCE
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+var infoPanel = table.new(position.top_left, 2, 6, bgcolor=color.new(color.black, 20), border_width=2)
+if barstate.islast
+    price_difference = normal_close - close
+    price_diff_pct = close != 0 ? (price_difference / close) * 100 : 0
+    
+    table.cell(infoPanel, 0, 0, "Price Info", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    table.cell(infoPanel, 1, 0, "Value", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    
+    table.cell(infoPanel, 0, 1, "Normal Close", text_color=color.white, text_size=size.small, bgcolor=color.new(color.green, 40))
+    table.cell(infoPanel, 1, 1, str.tostring(normal_close, "#.##"), text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 40))
+    
+    table.cell(infoPanel, 0, 2, "HA Close", text_color=color.white, text_size=size.small, bgcolor=color.new(color.orange, 40))
+    table.cell(infoPanel, 1, 2, str.tostring(close, "#.##"), text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 40))
+    
+    table.cell(infoPanel, 0, 3, "Difference", text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 40))
+    diff_color = price_difference > 0 ? color.new(color.green, 40) : price_difference < 0 ? color.new(color.red, 40) : color.new(color.gray, 40)
+    table.cell(infoPanel, 1, 3, str.tostring(price_difference, "#.##"), text_color=color.white, text_size=size.small, bgcolor=diff_color)
+    
+    table.cell(infoPanel, 0, 4, "Difference %", text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 40))
+    table.cell(infoPanel, 1, 4, str.tostring(price_diff_pct, "#.##") + "%", text_color=color.white, text_size=size.small, bgcolor=diff_color)
+    
+    table.cell(infoPanel, 0, 5, "Performance", text_color=color.white, text_size=size.small, bgcolor=color.new(color.yellow, 60))
+    table.cell(infoPanel, 1, 5, "NORMAL CANDLES", text_color=color.white, text_size=size.small, bgcolor=color.new(color.green, 60))
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// END OF SCRIPT
+// ═══════════════════════════════════════════════════════════════════════════════════
