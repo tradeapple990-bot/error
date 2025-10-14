@@ -506,6 +506,8 @@ if in_trade and isAfter315PM()
     in_trade := false
     trade_points_tp := trade_type == "BUY" ? normal_close - entry_price : entry_price - normal_close
 
+
+
 // Exit Logic with Ceyhun ATR trailing - USE NORMAL CANDLE PRICE
 if in_trade and bar_index > entry_bar_index and not exit_315
     
@@ -519,24 +521,27 @@ if in_trade and bar_index > entry_bar_index and not exit_315
     else
         if trade_type == "BUY"
             if Sell_ATR or ta.crossunder(Trail1, Trail2)
-                if normal_close > entry_price  // USE NORMAL CANDLE
+                actual_pnl = normal_close - entry_price
+                if actual_pnl > 0  // Check actual P&L
                     tp_hit_alert := true
                     in_trade := false
-                    trade_points_tp := normal_close - entry_price
+                    trade_points_tp := actual_pnl
                 else
                     sl_hit_alert := true
                     in_trade := false
-                    trade_points_sl := entry_price - normal_close
+                    trade_points_sl := math.abs(actual_pnl)
         else if trade_type == "SELL"
             if Buy_ATR or ta.crossover(Trail1, Trail2)
-                if normal_close < entry_price  // USE NORMAL CANDLE
+                actual_pnl = entry_price - normal_close
+                if actual_pnl > 0  // Check actual P&L
                     tp_hit_alert := true
                     in_trade := false
-                    trade_points_tp := entry_price - normal_close
+                    trade_points_tp := actual_pnl
                 else
                     sl_hit_alert := true
                     in_trade := false
-                    trade_points_sl := normal_close - entry_price
+                    trade_points_sl := math.abs(actual_pnl)
+
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // PERFORMANCE TRACKING - NOW BASED ON NORMAL CANDLES
