@@ -821,31 +821,26 @@ if barstate.islast
     table.cell(statusTable, 0, row_offset + 11, "User", text_color=color.white, bgcolor=color.new(color.navy, 40))
     table.cell(statusTable, 1, row_offset + 11, user_login, text_color=color.white, bgcolor=color.new(color.gray, 40))
 
-// ═══════════════════════════════════════════════════════════════════════════════════
-// VISUAL PLOTTING
-// ═══════════════════════════════════════════════════════════════════════════════════
-
 // Plot VWAP
-plot(show_vwap_line ? vwapValue : na, title="VWAP", color=#2962FF, linewidth=2)
+plot(show_vwap_line ? vwapValue : na, title="VWAP", color=#2962FF, linewidth=2, display=display.none)
 
 // Plot Normal Candle Close Line (for reference)
-plot(show_normal_candles ? normal_close : na, title="Normal Candle Close", color=color.new(color.yellow, 0), linewidth=2, style=plot.style_line)
+plot(show_normal_candles ? normal_close : na, title="Normal Candle Close", color=color.new(color.yellow, 0), linewidth=2, style=plot.style_line, display=display.none)
 
 // Plot Ceyhun ATR Trailing Lines
-TS1 = plot(show_trail_lines ? Trail1 : na, 'Fast Trail', style=plot.style_line, color=Trail1 > Trail2 ? color.blue : color.yellow, linewidth=2)
-TS2 = plot(show_trail_lines ? Trail2 : na, 'Slow Trail', style=plot.style_line, color=Trail1 > Trail2 ? color.green : color.red, linewidth=2)
-fill(TS1, TS2, Bull ? color.new(color.green, 90) : color.new(color.red, 90))
+TS1 = plot(show_trail_lines ? Trail1 : na, 'Fast Trail', style=plot.style_line, color=Trail1 > Trail2 ? color.blue : color.yellow, linewidth=2, display=display.none)
+TS2 = plot(show_trail_lines ? Trail2 : na, 'Slow Trail', style=plot.style_line, color=Trail1 > Trail2 ? color.green : color.red, linewidth=2, display=display.none)
+fill(TS1, TS2, Bull ? color.new(color.green, 90) : color.new(color.red, 90), display=display.none)
 
 // Plot active stop loss level when in trade
-plot(in_trade ? stop_loss : na, title="Active Stop Loss", color=color.red, linewidth=2, style=plot.style_linebr)
+plot(in_trade ? stop_loss : na, title="Active Stop Loss", color=color.red, linewidth=2, style=plot.style_linebr, display=display.none)
 
 // Plot entry signals
 plotshape(vwap_buy_signal, title='VWAP Buy Signal', style=shape.labelup, location=location.belowbar, color=color.green, text='VWAP\nBUY', textcolor=color.white, size=size.small)
 plotshape(vwap_sell_signal, title='VWAP Sell Signal', style=shape.labeldown, location=location.abovebar, color=color.red, text='VWAP\nSELL', textcolor=color.white, size=size.small)
 
 // Plot blocked signals
-plotshape(signal_blocked_this_bar, title='Blocked Signal', style=shape.xcross, location=location.top, color=color.orange, text='BLOCKED', textcolor=color.white, size=size.tiny)
-
+plotshape(signal_blocked_this_bar, title='Blocked Signal', style=shape.xcross, location=location.top, color=color.orange, text='BLOCKED', textcolor=color.white, size=size.tiny, display=display.none)
 // Exit labels - NOW SHOWING NORMAL CANDLE PERFORMANCE
 atr_value = ta.atr(20) * 2
 
@@ -880,11 +875,7 @@ if exit_315
 bcl = Green ? color.lime : Blue ? color.blue : Yellow ? color.yellow : Red ? color.red : color.white
 barcolor(in_trade ? (trade_type == "BUY" ? color.new(color.green, 70) : color.new(color.red, 70)) : bcl)
 
-bgcolor(in_trade and trade_type == "BUY" ? color.new(color.green, 95) : in_trade and trade_type == "SELL" ? color.new(color.red, 95) : na, title="Active Trade Background")
-bgcolor(complete_candle_above and not in_trade ? color.new(color.green, 90) : na, title="Complete Candle Above VWAP")
-bgcolor(complete_candle_below and not in_trade ? color.new(color.red, 90) : na, title="Complete Candle Below VWAP")
-bgcolor(signal_blocked_this_bar ? color.new(color.orange, 85) : na, title="Signal Blocked by Overlap Prevention")
-bgcolor(isEntryBlocked() ? color.new(color.gray, 90) : na, title="Entries Blocked After 3:15 PM")
+
 
 
 
