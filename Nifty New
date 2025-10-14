@@ -817,8 +817,8 @@ swing_consecutive_color_count := swing_bar_is_lime_or_red ? (swing_bar_is_lime_o
 swing_entry_allowed = enable_swing_strategy and not swing_in_trade and isSwingStartTimeValid()
 
 
-swing_buy_signal_condition = (((swing_is_normal_bar and swing_o2 < swing_c2 and close > swing_crossPlot and swing_is_green_candle and swing_vol_filter)) and swing_entry_allowed and isSwingBiasAllowedForBuy() and swing_htf_buy_confluence)
-swing_sell_signal_condition = (((swing_is_normal_bar and swing_o2 > swing_c2 and close < swing_crossPlot and swing_is_red_candle and swing_vol_filter)) and swing_entry_allowed and isSwingBiasAllowedForSell() and swing_htf_sell_confluence)
+swing_buy_signal_condition = (((swing_is_normal_bar and swing_o2 < swing_c2 and close > swing_crossPlot and swing_is_green_candle and swing_vol_filter) or (swing_is_squeeze_bar and swing_green_star)) and swing_entry_allowed and isSwingBiasAllowedForBuy() and swing_htf_buy_confluence)
+swing_sell_signal_condition = (((swing_is_normal_bar and swing_o2 > swing_c2 and close < swing_crossPlot and swing_is_red_candle and swing_vol_filter) or (swing_is_squeeze_bar and swing_red_star)) and swing_entry_allowed and isSwingBiasAllowedForSell() and swing_htf_sell_confluence)
 
 
 swing_hat_buy_signal = swing_buy_signal_condition and swing_entry_allowed 
@@ -1680,19 +1680,6 @@ if swing_sl_hit_alert and enable_swing_strategy
     exit_type = swing_use_star_based_exit ? "STAR" : "FIXED"
     label.new(x=bar_index, y=label_y, text="❌ SWING " + exit_type + " SL -" + str.tostring(math.round(actual_sl_points, 1)) + " pts", style=label_style, color=color.new(color.purple, 0), textcolor=color.white, size=size.small)
 
-// ─── Swing background highlighting
-bgcolor(
-     swing_in_trade and swing_trade_type == "BUY" and enable_swing_strategy ? color.new(color.blue, 95) :
-     swing_in_trade and swing_trade_type == "SELL" and enable_swing_strategy ? color.new(color.purple, 95) : na,
-     title="Swing Active Trade Background")
-
-bgcolor(
-     swing_green_star and not swing_in_trade and enable_swing_strategy ? color.new(color.blue, 90) : na,
-     title="Swing Green Star Signal")
-
-bgcolor(
-     swing_red_star and not swing_in_trade and enable_swing_strategy ? color.new(color.purple, 90) : na,
-     title="Swing Red Star Signal")
 
 
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -1819,15 +1806,6 @@ if swing_closed_by_override and swing_enable_alerts
     swing_closed_by_override := false
 
 
-// Background highlighting for various conditions
-bgcolor(overlap_detected ? color.new(color.yellow, 85) : na, title="Same Bar Overlap")
-bgcolor(active_trade_blocks ? color.new(color.orange, 85) : na, title="Active Trade Blocks Signal")
-bgcolor(isEntryBlocked() ? color.new(color.gray, 90) : na, title="Entries Blocked After 3:15 PM")
-
-
-// Highlight Supertrend direction changes and activation
-bgcolor(tbh_direction != tbh_direction[1] and enable_tbh_strategy and show_tbh_supertrend ? color.new(color.blue, 95) : na, title="Supertrend Direction Change")
-bgcolor(tbh_in_trade and tbh_supertrend_activated and not tbh_supertrend_activated[1] ? color.new(color.lime, 85) : na, title="TBH Supertrend Takes Over")
 
 // Color candles based on active trades - Updated with 3 strategies
 barcolor(tbh_in_trade and enable_tbh_strategy and tbh_trade_type == "BUY" ? color.new(color.aqua, 70) :
