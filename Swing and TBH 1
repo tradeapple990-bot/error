@@ -902,7 +902,7 @@ swing_cum_1 = ta.cum(1)
 swing_highest_1 = ta.highest(normal_high - swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
 swing_highest_2 = ta.highest(normal_high - swing_atr_trail_mult * ta.atr(swing_atr_trail_period), swing_atr_trail_hhv)
 swing_iff_1 = normal_close > swing_highest_1 and normal_close > normal_close[1] ? swing_highest_2 : swing_Prev
-swing_TS = swing_cum_1 < 16 ? normal_close : swing_iff_1
+swing_TS = swing_cum_1 < 16 ? na : swing_iff_1
 swing_iff_2 = normal_close < swing_TS ? color.red : color.black
 swing_Color = normal_close > swing_TS ? color.green : swing_iff_2
 swing_Buy_ATR = ta.crossover(normal_close, swing_TS)
@@ -919,57 +919,4 @@ if swing_in_trade
         swing_star_count_since_entry += 1
     else if swing_trade_type == "SELL" and swing_green_star
         swing_star_count_since_entry += 1
-
-
-
-// ATR Trailing Stop Exit Logic - FIXED: Proper profit/loss detection
-if swing_in_trade and swing_enable_atr_trail_exit and barstate.isconfirmed
-    if swing_trade_type == "BUY" and swing_Sell_ATR
-        // Exit BUY on ATR trail crossunder
-        swing_exit_price := normal_close
-        raw_points = swing_exit_price - swing_entry_price
-        
-        if raw_points > 0
-            // Profit exit
-            swing_trade_points_tp := raw_points
-            swing_tp_hit_alert := true
-            swing_sl_hit_alert := false
-        else
-            // Loss exit
-            swing_trade_points_sl := math.abs(raw_points)
-            swing_sl_hit_alert := true
-            swing_tp_hit_alert := false
-        
-        swing_in_trade := false
-        swing_trade_type := ""
-        
-        if swing_enable_alerts
-            exit_type = raw_points > 0 ? "TP" : "SL"
-            points_str = raw_points > 0 ? ("+" + str.tostring(raw_points, "#.##")) : ("-" + str.tostring(math.abs(raw_points), "#.##"))
-            alert("Swing BUY Exit (ATR Trail " + exit_type + ") - Exit: " + str.tostring(swing_exit_price, "#.##") + " | Points: " + points_str, alert.freq_once_per_bar)
-    
-    else if swing_trade_type == "SELL" and swing_Buy_ATR
-        // Exit SELL on ATR trail crossover
-        swing_exit_price := normal_close
-        raw_points = swing_entry_price - swing_exit_price
-        
-        if raw_points > 0
-            // Profit exit
-            swing_trade_points_tp := raw_points
-            swing_tp_hit_alert := true
-            swing_sl_hit_alert := false
-        else
-            // Loss exit
-            swing_trade_points_sl := math.abs(raw_points)
-            swing_sl_hit_alert := true
-            swing_tp_hit_alert := false
-        
-        swing_in_trade := false
-        swing_trade_type := ""
-        
-        if swing_enable_alerts
-            exit_type = raw_points > 0 ? "TP" : "SL"
-            points_str = raw_points > 0 ? ("+" + str.tostring(raw_points, "#.##")) : ("-" + str.tostring(math.abs(raw_points), "#.##"))
-            alert("Swing SELL Exit (ATR Trail " + exit_type + ") - Exit: " + str.tostring(swing_exit_price, "#.##") + " | Points: " + points_str, alert.freq_once_per_bar)
-
 
