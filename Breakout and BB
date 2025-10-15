@@ -262,6 +262,17 @@ auto_tp_time = input.bool(true, title="Auto TP at 3:15 PM", group="Breakout Stra
 
 breakout_enable_alerts = input.bool(true, title="Enable Breakout Alerts", group="Breakout Strategy")
 
+
+// DEBUG LABELS FOR BREAKOUT STRATEGY
+enable_breakout_debug = input.bool(false, title="🔍 Enable Breakout Debug Labels", group="Breakout Debug")
+debug_date_year = input.int(2025, title="Debug Date - Year", minval=2020, maxval=2030, group="Breakout Debug")
+debug_date_month = input.int(1, title="Debug Date - Month", minval=1, maxval=12, group="Breakout Debug")
+debug_date_day = input.int(15, title="Debug Date - Day", minval=1, maxval=31, group="Breakout Debug")
+debug_time_hour = input.int(10, title="Debug Time - Hour", minval=0, maxval=23, group="Breakout Debug")
+debug_time_minute = input.int(30, title="Debug Time - Minute", minval=0, maxval=59, group="Breakout Debug")
+
+
+
 // ═══════════════════════════════════════════════════════════════════════════════════
 // TOP BOTTOM HUNTER STRATEGY - PURE SUPERTREND TRAILING (NO FIXED TP)
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -494,6 +505,22 @@ isSlOrTpHitInCurrentCandle(entry_price, stop_loss, take_profit, is_buy_trade) =>
         (not na(stop_loss) and normal_high >= stop_loss) or (not na(take_profit) and normal_low <= take_profit)
 
 
+
+
+
+// Check if current bar matches debug date/time
+isDebugCandle() =>
+    current_year = year(time, 'GMT+5:30')
+    current_month = month(time, 'GMT+5:30')
+    current_day = dayofmonth(time, 'GMT+5:30')
+    current_hour = hour(time, 'GMT+5:30')
+    current_minute = minute(time, 'GMT+5:30')
+    
+    current_year == debug_date_year and 
+     current_month == debug_date_month and 
+     current_day == debug_date_day and 
+     current_hour == debug_time_hour and 
+     current_minute == debug_time_minute
 
 
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -813,6 +840,194 @@ var bool breakout_auto_tp_hit_alert = false
 var bool breakout_315_exit = false
 var float breakout_trade_points_tp = 0.0
 var float breakout_trade_points_sl = 0.0
+
+
+// ═══════════════════════════════════════════════════════════════════
+// BREAKOUT STRATEGY DEBUG LABELS
+// ═══════════════════════════════════════════════════════════════════
+
+if enable_breakout_debug and isDebugCandle()
+    
+    // Calculate all condition states for BUY breakout
+    debug_phval_size = array.size(phval)
+    debug_plval_size = array.size(plval)
+    debug_close_gt_open = close > open
+    debug_close_lt_open = close < open
+    debug_strategy_enabled = enable_breakout_strategy
+    debug_entry_blocked = isEntryBlocked()
+    debug_bias_buy_allowed = isBiasAllowedForBuy()
+    debug_bias_sell_allowed = isBiasAllowedForSell()
+    debug_close_gt_hgst = close > hgst_value
+    debug_close_lt_lwst = close < lwst_value
+    
+    // BUY Breakout Analysis
+    var string buy_debug_text = ""
+    buy_debug_text := "🔍 BREAKOUT BUY DEBUG\n"
+    buy_debug_text += "Time: " + str.tostring(debug_time_hour, "00") + ":" + str.tostring(debug_time_minute, "00") + "\n"
+    buy_debug_text += "═══════════════════════\n\n"
+    
+    // Primary Conditions
+    buy_debug_text += "PRIMARY CONDITIONS:\n"
+    buy_debug_text += (debug_strategy_enabled ? "✅" : "❌") + " Strategy Enabled: " + str.tostring(debug_strategy_enabled) + "\n"
+    buy_debug_text += (debug_close_gt_open ? "✅" : "❌") + " Close > Open (Green): " + str.tostring(close, "#.##") + " > " + str.tostring(open, "#.##") + "\n"
+    buy_debug_text += (not debug_entry_blocked ? "✅" : "❌") + " Entry Not Blocked: " + str.tostring(not debug_entry_blocked) + "\n"
+    buy_debug_text += (debug_bias_buy_allowed ? "✅" : "❌") + " Bias Allowed: " + current_nifty_bias + " (" + str.tostring(bias_spread, "#.##") + ")\n"
+    buy_debug_text += (debug_phval_size >= mintest ? "✅" : "❌") + " Pivot Highs Array Size: " + str.tostring(debug_phval_size) + " >= " + str.tostring(mintest) + "\n"
+    buy_debug_text += (debug_close_gt_hgst ? "✅" : "❌") + " Close > HHV[" + str.tostring(prd) + "]: " + str.tostring(close, "#.##") + " > " + str.tostring(hgst_value, "#.##") + "\n"
+    buy_debug_text += (breakout_in_trade ? "❌" : "✅") + " Not In Trade: " + str.tostring(not breakout_in_trade) + "\n"
+    buy_debug_text += (any_strategy_active and enable_overlap_filter ? "❌" : "✅") + " No Overlap: " + str.tostring(not any_strategy_active) + "\n\n"
+    
+    // Detailed Breakout Logic Analysis
+    buy_debug_text += "BREAKOUT LOGIC:\n"
+    
+    if debug_phval_size >= mintest and debug_close_gt_open and debug_strategy_enabled and not debug_entry_blocked and debug_bias_buy_allowed
+        if debug_close_gt_hgst
+            var float debug_bomax = array.get(phval, 0)
+            var int debug_xx = 0
+            var int debug_pivot_loop_count = 0
+            
+            // Simulate the pivot loop
+            for x = 0 to debug_phval_size - 1
+                debug_pivot_loop_count := x
+                if array.get(phval, x) >= close
+                    break
+                debug_xx := x
+                debug_bomax := math.max(debug_bomax, array.get(phval, x))
+            
+            buy_debug_text += "  Pivot Loop Iterations: " + str.tostring(debug_pivot_loop_count + 1) + "\n"
+            buy_debug_text += "  Valid Pivots (xx): " + str.tostring(debug_xx) + "\n"
+            buy_debug_text += "  Breakout Max Level: " + str.tostring(debug_bomax, "#.##") + "\n"
+            buy_debug_text += (debug_xx >= mintest ? "  ✅" : "  ❌") + " xx >= mintest: " + str.tostring(debug_xx) + " >= " + str.tostring(mintest) + "\n"
+            buy_debug_text += (open <= debug_bomax ? "  ✅" : "  ❌") + " Open <= bomax: " + str.tostring(open, "#.##") + " <= " + str.tostring(debug_bomax, "#.##") + "\n"
+            
+            if debug_xx >= mintest and open <= debug_bomax
+                var int debug_num = 0
+                // Count pivots in zone
+                for x = 0 to debug_xx
+                    if array.get(phval, x) <= debug_bomax and array.get(phval, x) >= debug_bomax - chwidth
+                        debug_num += 1
+                
+                buy_debug_text += "  Zone Width: " + str.tostring(chwidth, "#.##") + " pts\n"
+                buy_debug_text += "  Zone Range: " + str.tostring(debug_bomax - chwidth, "#.##") + " to " + str.tostring(debug_bomax, "#.##") + "\n"
+                buy_debug_text += (debug_num >= mintest ? "  ✅" : "  ❌") + " Pivots in Zone: " + str.tostring(debug_num) + " >= " + str.tostring(mintest) + "\n"
+                buy_debug_text += (hgst_value < debug_bomax ? "  ✅" : "  ❌") + " HHV < bomax: " + str.tostring(hgst_value, "#.##") + " < " + str.tostring(debug_bomax, "#.##") + "\n"
+                
+                if debug_num >= mintest and hgst_value < debug_bomax
+                    var float debug_points_above = close - debug_bomax
+                    buy_debug_text += (debug_points_above >= min_points_above_zone ? "  ✅" : "  ❌") + " Points Above Zone: " + str.tostring(debug_points_above, "#.##") + " >= " + str.tostring(min_points_above_zone, "#.##") + "\n"
+                    buy_debug_text += "\n🎯 RESULT: " + (bullish_breakout_base ? "✅ BUY SIGNAL GENERATED" : "❌ NO SIGNAL") + "\n"
+                else
+                    buy_debug_text += "\n❌ Zone test failed\n"
+            else
+                buy_debug_text += "\n❌ Pivot validation failed\n"
+        else
+            buy_debug_text += "❌ Close not above HHV\n"
+    else
+        buy_debug_text += "❌ Primary conditions not met\n"
+    
+    buy_debug_text += "\n═══════════════════════\n"
+    buy_debug_text += "Candle Data:\n"
+    buy_debug_text += "Open: " + str.tostring(open, "#.##") + "\n"
+    buy_debug_text += "High: " + str.tostring(high, "#.##") + "\n"
+    buy_debug_text += "Low: " + str.tostring(low, "#.##") + "\n"
+    buy_debug_text += "Close: " + str.tostring(close, "#.##") + "\n"
+    
+    // Create label above high
+    label.new(
+         bar_index, 
+         high + (high - low) * 0.5,
+         buy_debug_text,
+         style=label.style_label_down,
+         color=color.new(color.blue, 10),
+         textcolor=color.white,
+         size=size.normal,
+         textalign=text.align_left
+     )
+    
+    // SELL Breakout Analysis
+    var string sell_debug_text = ""
+    sell_debug_text := "🔍 BREAKOUT SELL DEBUG\n"
+    sell_debug_text += "Time: " + str.tostring(debug_time_hour, "00") + ":" + str.tostring(debug_time_minute, "00") + "\n"
+    sell_debug_text += "═══════════════════════\n\n"
+    
+    // Primary Conditions
+    sell_debug_text += "PRIMARY CONDITIONS:\n"
+    sell_debug_text += (debug_strategy_enabled ? "✅" : "❌") + " Strategy Enabled: " + str.tostring(debug_strategy_enabled) + "\n"
+    sell_debug_text += (debug_close_lt_open ? "✅" : "❌") + " Close < Open (Red): " + str.tostring(close, "#.##") + " < " + str.tostring(open, "#.##") + "\n"
+    sell_debug_text += (not debug_entry_blocked ? "✅" : "❌") + " Entry Not Blocked: " + str.tostring(not debug_entry_blocked) + "\n"
+    sell_debug_text += (debug_bias_sell_allowed ? "✅" : "❌") + " Bias Allowed: " + current_nifty_bias + " (" + str.tostring(bias_spread, "#.##") + ")\n"
+    sell_debug_text += (debug_plval_size >= mintest ? "✅" : "❌") + " Pivot Lows Array Size: " + str.tostring(debug_plval_size) + " >= " + str.tostring(mintest) + "\n"
+    sell_debug_text += (debug_close_lt_lwst ? "✅" : "❌") + " Close < LLV[" + str.tostring(prd) + "]: " + str.tostring(close, "#.##") + " < " + str.tostring(lwst_value, "#.##") + "\n"
+    sell_debug_text += (breakout_in_trade ? "❌" : "✅") + " Not In Trade: " + str.tostring(not breakout_in_trade) + "\n"
+    sell_debug_text += (any_strategy_active and enable_overlap_filter ? "❌" : "✅") + " No Overlap: " + str.tostring(not any_strategy_active) + "\n\n"
+    
+    // Detailed Breakout Logic Analysis
+    sell_debug_text += "BREAKOUT LOGIC:\n"
+    
+    if debug_plval_size >= mintest and debug_close_lt_open and debug_strategy_enabled and not debug_entry_blocked and debug_bias_sell_allowed
+        if debug_close_lt_lwst
+            var float debug_bomin = array.get(plval, 0)
+            var int debug_xx_sell = 0
+            var int debug_pivot_loop_count_sell = 0
+            
+            // Simulate the pivot loop
+            for x = 0 to debug_plval_size - 1
+                debug_pivot_loop_count_sell := x
+                if array.get(plval, x) <= close
+                    break
+                debug_xx_sell := x
+                debug_bomin := math.min(debug_bomin, array.get(plval, x))
+            
+            sell_debug_text += "  Pivot Loop Iterations: " + str.tostring(debug_pivot_loop_count_sell + 1) + "\n"
+            sell_debug_text += "  Valid Pivots (xx): " + str.tostring(debug_xx_sell) + "\n"
+            sell_debug_text += "  Breakdown Min Level: " + str.tostring(debug_bomin, "#.##") + "\n"
+            sell_debug_text += (debug_xx_sell >= mintest ? "  ✅" : "  ❌") + " xx >= mintest: " + str.tostring(debug_xx_sell) + " >= " + str.tostring(mintest) + "\n"
+            sell_debug_text += (open >= debug_bomin ? "  ✅" : "  ❌") + " Open >= bomin: " + str.tostring(open, "#.##") + " >= " + str.tostring(debug_bomin, "#.##") + "\n"
+            
+            if debug_xx_sell >= mintest and open >= debug_bomin
+                var int debug_num_sell = 0
+                // Count pivots in zone
+                for x = 0 to debug_xx_sell
+                    if array.get(plval, x) >= debug_bomin and array.get(plval, x) <= debug_bomin + chwidth
+                        debug_num_sell += 1
+                
+                sell_debug_text += "  Zone Width: " + str.tostring(chwidth, "#.##") + " pts\n"
+                sell_debug_text += "  Zone Range: " + str.tostring(debug_bomin, "#.##") + " to " + str.tostring(debug_bomin + chwidth, "#.##") + "\n"
+                sell_debug_text += (debug_num_sell >= mintest ? "  ✅" : "  ❌") + " Pivots in Zone: " + str.tostring(debug_num_sell) + " >= " + str.tostring(mintest) + "\n"
+                sell_debug_text += (lwst_value > debug_bomin ? "  ✅" : "  ❌") + " LLV > bomin: " + str.tostring(lwst_value, "#.##") + " > " + str.tostring(debug_bomin, "#.##") + "\n"
+                
+                if debug_num_sell >= mintest and lwst_value > debug_bomin
+                    var float debug_points_below = debug_bomin - close
+                    sell_debug_text += (debug_points_below >= min_points_below_zone ? "  ✅" : "  ❌") + " Points Below Zone: " + str.tostring(debug_points_below, "#.##") + " >= " + str.tostring(min_points_below_zone, "#.##") + "\n"
+                    sell_debug_text += "\n🎯 RESULT: " + (bearish_breakdown_base ? "✅ SELL SIGNAL GENERATED" : "❌ NO SIGNAL") + "\n"
+                else
+                    sell_debug_text += "\n❌ Zone test failed\n"
+            else
+                sell_debug_text += "\n❌ Pivot validation failed\n"
+        else
+            sell_debug_text += "❌ Close not below LLV\n"
+    else
+        sell_debug_text += "❌ Primary conditions not met\n"
+    
+    sell_debug_text += "\n═══════════════════════\n"
+    sell_debug_text += "Candle Data:\n"
+    sell_debug_text += "Open: " + str.tostring(open, "#.##") + "\n"
+    sell_debug_text += "High: " + str.tostring(high, "#.##") + "\n"
+    sell_debug_text += "Low: " + str.tostring(low, "#.##") + "\n"
+    sell_debug_text += "Close: " + str.tostring(close, "#.##") + "\n"
+    
+    // Create label below low
+    label.new(
+         bar_index, 
+         low - (high - low) * 0.5,
+         sell_debug_text,
+         style=label.style_label_up,
+         color=color.new(color.red, 10),
+         textcolor=color.white,
+         size=size.normal,
+         textalign=text.align_left
+     )
+
 
 // ═══════════════════════════════════════════════════════════════════════════════════
 // TOP BOTTOM HUNTER WITH PURE SUPERTREND TRAILING - NO FIXED TP
